@@ -1,0 +1,35 @@
+:root {
+  color-scheme: light dark;
+  --background: #fff;
+  --text: #0c0c14;
+  --weak: #5c596d;
+  --border: #d1cfdb;
+  --hover: #f3f1f8;
+  --accent: #6d4aff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  background: var(--background);
+  color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1b1825;
+    --text: #f0edf7;
+    --weak: #aaa4b9;
+    --border: #4a435b;
+    --hover: #302a40;
+    --accent: #a78bfa;
+  }
+}
+body { margin: 0; min-width: 310px; }
+main { padding: 16px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.shortcut { min-width: 132px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: transparent; }
+button:hover { background: var(--hover); }
+button:focus-visible, button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .5; cursor: default; }
+footer { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
+#status { color: var(--weak); font-size: 12px; }
+.icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 5px; border: 0; border-radius: 6px; background: transparent; }
+.icon svg { width: 16px; height: 16px; }

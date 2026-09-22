@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Synthetic calendar fixture</title>
+  <style>
+    body { font: 14px system-ui; padding: 24px; }
+    .eventpopover { width: 480px; padding: 16px; border: 1px solid #ddd; }
+    .text-pre-wrap { white-space: pre-wrap; }
+    button { padding: 6px; }
+  </style>
+</head>
+<body>
+  <input id="search" aria-label="Search">
+  <div class="eventpopover" tabindex="-1">
+    <header class="eventpopover-header">
+      <button data-testid="event-popover:edit" aria-busy="false" type="button">Edit</button>
+      <h1 class="eventpopover-title" title="Planning https://example.com/notes and WWW.example.org">Planning https://example.com/notes and WWW.example.org</h1>
+    </header>
+    <div class="eventpopover-body">
+      <div>Example calendar</div>
+      <div class="text-pre-wrap">First line<br>Second line <a href="https://example.net">reference</a></div>
+    </div>
+  </div>
+  <template id="editor">
+    <form class="modal-two-dialog-container">
+      <input id="event-title-input" value="Example event">
+      <textarea id="event-description-input" rows="2">Example description</textarea>
+      <div class="modal-two-footer">
+        <button type="button">Cancel</button>
+        <button data-testid="create-event-modal:save" aria-busy="false" type="submit">Save</button>
+      </div>
+    </form>
+  </template>
+</body>
+</html>

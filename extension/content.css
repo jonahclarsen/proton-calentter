@@ -1,0 +1,23 @@
+.eventpopover .pcal-copy-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-block-end: 1rem;
+}
+.eventpopover .pcal-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+.pcal-copy-button svg { width: 1rem; height: 1rem; flex-shrink: 0; }
+.pcal-copy-button:disabled { opacity: 0.45; }
+.eventpopover a[data-pcal-link] {
+  color: var(--link-norm, #6d4aff);
+  text-decoration: underline;
+  cursor: pointer;
+}
+@media (prefers-color-scheme: dark) {
+  .eventpopover a[data-pcal-link] { color: var(--link-norm, #a78bfa); }
+}

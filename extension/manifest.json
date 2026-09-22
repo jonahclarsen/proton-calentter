@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Proton Calentter",
+  "version": "1.0.0",
+  "description": "Better Proton Calendar: clickable title links, copy buttons, and customizable edit/save shortcuts.",
+  "permissions": ["clipboardWrite", "storage"],
+  "action": {
+    "default_title": "Proton Calentter",
+    "default_popup": "settings.html"
+  },
+  "options_ui": {
+    "page": "settings.html",
+    "open_in_tab": false
+  },
+  "content_scripts": [{
+    "matches": ["https://calendar.proton.me/*"],
+    "js": ["shortcuts.js", "content.js"],
+    "css": ["content.css"],
+    "run_at": "document_idle"
+  }]
+}
