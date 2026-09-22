@@ -3,7 +3,8 @@
 
   const defaults = {
     save: { key: 'Enter', meta: true, ctrl: false, alt: false, shift: false },
-    edit: { key: 'e', meta: false, ctrl: false, alt: false, shift: false }
+    edit: { key: 'e', meta: false, ctrl: false, alt: false, shift: false },
+    delete: { key: 'r', meta: true, ctrl: false, alt: false, shift: true }
   };
   const modifierKeys = new Set(['Meta', 'Control', 'Alt', 'Shift', 'AltGraph', 'CapsLock', 'Unidentified', 'Dead']);
   function valid(value) {
@@ -24,9 +25,12 @@
     return Object.keys(actual).every(key => actual[key] === shortcut[key]);
   }
   function label(shortcut) {
-    return [shortcut.ctrl && 'Ctrl', shortcut.alt && 'Alt', shortcut.shift && 'Shift',
-      shortcut.meta && 'Cmd', shortcut.key === ' ' ? 'Space' :
+    return [shortcut.meta && 'Cmd', shortcut.ctrl && 'Ctrl', shortcut.alt && 'Alt', shortcut.shift && 'Shift',
+      shortcut.key === ' ' ? 'Space' :
         shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key].filter(Boolean).join(' + ');
   }
-  globalThis.ProtonCalentterShortcuts = { defaults, normalize, fromEvent, matches, label, valid };
+  function normalizeFeatures(value) {
+    return Object.fromEntries(['links', 'copy', ...Object.keys(defaults)].map(key => [key, value?.[key] !== false]));
+  }
+  globalThis.ProtonCalentterShortcuts = { defaults, normalize, normalizeFeatures, fromEvent, matches, label, valid };
 })();

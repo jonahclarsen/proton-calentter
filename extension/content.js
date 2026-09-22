@@ -3,11 +3,19 @@
 
   const shortcutsAPI = globalThis.ProtonCalentterShortcuts;
   let shortcuts = shortcutsAPI.normalize();
-  const settingsReady = chrome.storage.local.get('shortcuts').then(result => {
+  let features = shortcutsAPI.normalizeFeatures();
+  const settingsReady = chrome.storage.local.get(['shortcuts', 'features']).then(result => {
     shortcuts = shortcutsAPI.normalize(result.shortcuts);
+    features = shortcutsAPI.normalizeFeatures(result.features);
+    document.querySelectorAll('.eventpopover').forEach(enhance);
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.shortcuts) shortcuts = shortcutsAPI.normalize(changes.shortcuts.newValue);
+    if (area === 'local' && changes.features) {
+      features = shortcutsAPI.normalizeFeatures(changes.features.newValue);
+      if (!features.delete) cancelDelete?.();
+      document.querySelectorAll('.eventpopover').forEach(enhance);
+    }
   });
 
   const bars = new WeakMap();
@@ -120,7 +128,11 @@
   function enhance(popover) {
     if (!popover.isConnected) return;
     const title = popover.querySelector('.eventpopover-title');
-    if (title) linkify(title);
+    if (title) {
+      if (features.links) linkify(title);
+      else title.querySelectorAll('a[data-pcal-link]').forEach(link => link.replaceWith(...link.childNodes));
+    }
+    if (!features.copy) { bars.get(popover)?.remove(); bars.delete(popover); return; }
     const body = popover.querySelector('.eventpopover-header')?.nextElementSibling;
     if (!title || !body) return;
     let bar = bars.get(popover);
@@ -170,7 +182,6 @@
       batch.forEach(enhance);
     });
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
-  document.querySelectorAll('.eventpopover').forEach(enhance);
 
   function visible(element) {
     return !!element?.getClientRects().length && !element.closest('[hidden], [inert], [aria-hidden="true"]') &&
@@ -184,15 +195,96 @@
     return element instanceof HTMLElement && (element.isContentEditable ||
       !!element.closest('input, textarea, select, [role="textbox"], [role="searchbox"], [role="combobox"]'));
   }
-  // Wait for saved preferences before allowing either shortcut.
+  function activeSurface(target) {
+    // Use the innermost visible dialog, excluding underlying event cards.
+    const dialogs = [...document.querySelectorAll('.modal-two-dialog-container, [role="dialog"], [aria-modal="true"]')].filter(visible);
+    const inner = dialogs.filter(dialog => !dialogs.some(other => other !== dialog && dialog.contains(other)));
+    if (inner.length) return inner.at(-1);
+    const popovers = [...document.querySelectorAll('.eventpopover')].filter(visible);
+    const focused = target instanceof Element ? target.closest('.eventpopover') : null;
+    return focused && visible(focused) ? focused : popovers.length === 1 ? popovers[0] : null;
+  }
+  function editorDelete(surface) {
+    if (!surface?.querySelector('#event-title-input')) return null;
+    return [...surface.querySelectorAll('.modal-two-footer button')]
+      .find(button => button.textContent.trim() === 'Delete');
+  }
+  function confirmationDelete(surface) {
+    if (!surface || surface.querySelector('#event-title-input')) return null;
+    const heading = surface.querySelector('.modal-two-title, h1, h2')?.textContent.trim();
+    if (!['Delete event', 'Delete recurring event'].includes(heading)) return null;
+    return [...surface.querySelectorAll('button')].find(button => button.textContent.trim() === 'Delete');
+  }
+  let cancelDelete;
+  function startDelete(surface, first, moreOptions) {
+    let stage = moreOptions ? 'editor' : 'confirm';
+    let previous = surface;
+    const existing = new Set(document.querySelectorAll('.modal-two-dialog-container, [role="dialog"], [aria-modal="true"]'));
+    const observer = new MutationObserver(advance);
+    const timer = setTimeout(cancel, 3000);
+    function cancel() {
+      observer.disconnect();
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('visibilitychange', cancel);
+      window.removeEventListener('blur', cancel);
+      cancelDelete = null;
+    }
+    function advance() {
+      if (!features.delete) return cancel();
+      const next = activeSurface(document.activeElement);
+      if (!next || next === previous) return;
+      // Only follow new dialogs created by this shortcut, never a pre-existing dialog.
+      if (existing.has(next)) return cancel();
+      const button = stage === 'editor' ? editorDelete(next) : confirmationDelete(next);
+      if (!button) return cancel();
+      if (!available(button)) return;
+      if (stage === 'editor') {
+        stage = 'confirm';
+        previous = next;
+        existing.add(next);
+      } else cancel();
+      button.click();
+    }
+    cancelDelete = cancel;
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('visibilitychange', cancel);
+    window.addEventListener('blur', cancel);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    first.click();
+    advance();
+  }
+  // Wait for saved preferences before allowing shortcuts.
   settingsReady.then(() => document.addEventListener('keydown', event => {
+    if (cancelDelete) {
+      if (['Meta', 'Control', 'Alt', 'Shift', 'AltGraph'].includes(event.key)) return;
+      if (shortcutsAPI.matches(event, shortcuts.delete)) {
+        event.preventDefault(); event.stopImmediatePropagation(); return;
+      }
+      cancelDelete();
+    }
     if (event.defaultPrevented || event.repeat || event.isComposing) return;
     const target = event.target;
     let button;
-    if (shortcutsAPI.matches(event, shortcuts.save) && target instanceof HTMLTextAreaElement &&
+    if (features.delete && shortcutsAPI.matches(event, shortcuts.delete)) {
+      const surface = activeSurface(target);
+      if (!surface) return;
+      // Unmodified custom shortcuts must not delete events while typing.
+      if (!(event.metaKey || event.ctrlKey || event.altKey) && typing(target)) return;
+      const confirm = confirmationDelete(surface);
+      const more = surface.querySelector('[data-testid="create-event-popover:more-event-options"]');
+      button = confirm || surface.querySelector('[data-testid="event-popover:delete"]') || editorDelete(surface) || more;
+      if (!available(button)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (confirm) button.click();
+      else startDelete(surface, button, button === more);
+      return;
+    }
+    if (features.save && shortcutsAPI.matches(event, shortcuts.save) && target instanceof HTMLTextAreaElement &&
         target.id === 'event-description-input' && !target.readOnly && !target.disabled) {
-      button = target.closest('form')?.querySelector('[data-testid="create-event-modal:save"]');
-    } else if (shortcutsAPI.matches(event, shortcuts.edit) && !typing(target) && !typing(document.activeElement)) {
+      button = target.closest('form')?.querySelector('[data-testid="create-event-modal:save"], [data-testid="create-event-popover:save"]');
+    } else if (features.edit && shortcutsAPI.matches(event, shortcuts.edit) && !typing(target) && !typing(document.activeElement)) {
       if ([...document.querySelectorAll('.modal-two, .modal-two-dialog-container, [role="dialog"], [aria-modal="true"]')].some(visible)) return;
       const popovers = [...document.querySelectorAll('.eventpopover')].filter(visible);
       const popover = target instanceof Element ? target.closest('.eventpopover') : null;

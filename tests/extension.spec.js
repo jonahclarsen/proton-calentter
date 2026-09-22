@@ -235,7 +235,7 @@ test('shortcut capture cancels and prevents duplicate bindings', async ({ calend
 
 test('settings follow light/dark mode without overflowing', async ({ calendar: { id }, context }, testInfo) => {
   const settings = await context.newPage();
-  await settings.setViewportSize({ width: 342, height: 164 });
+  await settings.setViewportSize({ width: 342, height: 380 });
   await settings.goto(`chrome-extension://${id}/settings.html`);
   await expect(settings.locator('#save')).toHaveText('Cmd + Enter');
   for (const mode of ['light', 'dark']) {
@@ -243,6 +243,7 @@ test('settings follow light/dark mode without overflowing', async ({ calendar: {
     expect(await settings.evaluate(() => getComputedStyle(document.documentElement).backgroundColor))
       .toBe(mode === 'light' ? 'rgb(255, 255, 255)' : 'rgb(27, 24, 37)');
     expect(await settings.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await settings.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
     await settings.screenshot({ path: testInfo.outputPath(`settings-${mode}.png`) });
   }
 });
@@ -251,4 +252,199 @@ test('does not inject on other sites', async ({ page }) => {
   await page.goto('https://example.org/');
   await expect(page.locator('.pcal-copy-bar')).toHaveCount(0);
   await expect(page.locator('.eventpopover-title a')).toHaveCount(0);
+});
+
+async function installDeletion(page, options = {}) {
+  await page.evaluate(({ view = 'small', delay = 0, recurring = false, unrelated = false, noDelete = false }) => {
+    document.body.dataset.deletes = '0';
+    document.body.dataset.deleteClicks = '0';
+    document.body.dataset.moreClicks = '0';
+    const showConfirmation = () => {
+      document.body.dataset.deleteClicks = String(Number(document.body.dataset.deleteClicks) + 1);
+      setTimeout(() => {
+        const dialog = document.createElement('form');
+        dialog.className = 'modal-two-dialog-container';
+        dialog.innerHTML = `<h1 class="modal-two-title">${unrelated ? 'Delete calendar' : recurring ? 'Delete recurring event' : 'Delete event'}</h1>
+          ${recurring ? '<label><input type="radio" name="recurringType" checked>This event</label><label><input type="radio" name="recurringType">All events</label>' : ''}
+          <button type="button" class="confirm-delete">Delete</button><button type="button">Cancel</button>`;
+        dialog.querySelector('.confirm-delete').onclick = () => {
+          document.body.dataset.deletes = String(Number(document.body.dataset.deletes) + 1);
+          document.body.dataset.scope = dialog.querySelector('input:checked')?.parentElement.textContent || 'single';
+          dialog.remove();
+        };
+        document.body.append(dialog);
+      }, delay);
+    };
+    const full = () => {
+      const fragment = document.querySelector('#editor').content.cloneNode(true);
+      const form = fragment.querySelector('form');
+      if (!noDelete) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Delete';
+        button.onclick = showConfirmation;
+        form.querySelector('.modal-two-footer').prepend(button);
+      }
+      document.body.append(fragment);
+      form.querySelector('textarea').focus();
+    };
+    if (view === 'large') full();
+    else if (view === 'medium') {
+      document.querySelector('.eventpopover').remove();
+      const card = document.createElement('div');
+      card.className = 'eventpopover';
+      card.tabIndex = -1;
+      card.innerHTML = `<form class="form--icon-labels"><header class="eventpopover-header"></header>
+        <input id="event-title-input" value="Example event"><textarea id="event-description-input"></textarea>
+        <footer><button type="button" data-testid="create-event-popover:more-event-options">More options</button>
+        <button type="submit" data-testid="create-event-popover:save">Save</button></footer></form>`;
+      card.querySelector('[data-testid="create-event-popover:more-event-options"]').onclick = () => {
+        document.body.dataset.moreClicks = String(Number(document.body.dataset.moreClicks) + 1);
+        card.remove();
+        setTimeout(full, delay);
+      };
+      document.body.append(card);
+      card.querySelector('textarea').focus();
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.testid = 'event-popover:delete';
+      button.textContent = 'Delete';
+      button.onclick = showConfirmation;
+      document.querySelector('.eventpopover-header').append(button);
+      document.querySelector('.eventpopover').focus();
+    }
+  }, options);
+}
+
+for (const view of ['small', 'medium', 'large']) {
+  test(`deletes and confirms from the ${view} event view`, async ({ calendar: { page } }) => {
+    await installDeletion(page, { view, delay: 30 });
+    await page.keyboard.press('Meta+Shift+r');
+    await expect(page.locator('body')).toHaveAttribute('data-deletes', '1');
+    await expect(page.locator('body')).toHaveAttribute('data-delete-clicks', '1');
+    await expect(page.locator('body')).toHaveAttribute('data-more-clicks', view === 'medium' ? '1' : '0');
+  });
+}
+
+test('save works in the medium editor too', async ({ calendar: { page } }) => {
+  await installDeletion(page, { view: 'medium' });
+  await page.locator('#event-description-input').fill('Compact changes');
+  await page.keyboard.press('Meta+Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-saved-description', 'Compact changes');
+});
+
+test('deletion preserves the selected recurring-event scope', async ({ calendar: { page } }) => {
+  await installDeletion(page, { recurring: true });
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-scope', 'This event');
+});
+
+test('deletion never confirms unrelated dialogs', async ({ calendar: { page } }) => {
+  await installDeletion(page, { unrelated: true });
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('.modal-two-title')).toHaveText('Delete calendar');
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '0');
+  await expect(page.locator('body')).toHaveAttribute('data-delete-clicks', '1');
+});
+
+test('Escape cancels pending deletion and a new press can confirm explicitly', async ({ calendar: { page } }) => {
+  await installDeletion(page, { delay: 200 });
+  await page.keyboard.press('Meta+Shift+r');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.confirm-delete')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '0');
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '1');
+});
+
+test('busy deletion and missing editor Delete never fall through to another card', async ({ calendar: { page } }) => {
+  await installDeletion(page);
+  await page.getByTestId('event-popover:delete').evaluate(button => button.setAttribute('aria-busy', 'true'));
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('body')).toHaveAttribute('data-delete-clicks', '0');
+  await page.getByTestId('event-popover:delete').evaluate(button => button.setAttribute('aria-busy', 'false'));
+  await installDeletion(page, { view: 'large', noDelete: true });
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('body')).toHaveAttribute('data-delete-clicks', '0');
+});
+
+test('repeated delete shortcut triggers only one action', async ({ calendar: { page } }) => {
+  await installDeletion(page, { delay: 150 });
+  await page.keyboard.press('Meta+Shift+r');
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-delete-clicks', '1');
+});
+
+test('all feature checkboxes apply immediately and persist', async ({ calendar: { page, id }, context }) => {
+  const settings = await context.newPage();
+  await settings.goto(`chrome-extension://${id}/settings.html`);
+  await expect(settings.getByRole('checkbox')).toHaveCount(5);
+  await settings.getByRole('checkbox', { name: 'Clickable links' }).uncheck();
+  await expect(page.locator('.eventpopover-title a')).toHaveCount(0);
+  await settings.getByRole('checkbox', { name: 'Copy buttons' }).uncheck();
+  await expect(page.locator('.pcal-copy-bar')).toHaveCount(0);
+  for (const name of ['Save shortcut', 'Edit shortcut', 'Delete shortcut']) {
+    await settings.getByRole('checkbox', { name, exact: true }).uncheck();
+  }
+  await expect(settings.locator('#save')).toBeDisabled();
+  await expect(settings.locator('#edit')).toBeDisabled();
+  await expect(settings.locator('#delete')).toBeDisabled();
+  await page.bringToFront();
+  await page.locator('.eventpopover').focus();
+  await page.keyboard.press('e');
+  await expect(page.locator('body')).toHaveAttribute('data-edits', '0');
+  await openEditor(page);
+  await page.keyboard.press('Meta+Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '0');
+  await page.reload();
+  await expect(page.locator('.eventpopover')).toBeVisible();
+  await expect(page.locator('.eventpopover-title a')).toHaveCount(0);
+  await expect(page.locator('.pcal-copy-bar')).toHaveCount(0);
+  await settings.bringToFront();
+  await settings.reload();
+  for (const checkbox of await settings.getByRole('checkbox').all()) await expect(checkbox).not.toBeChecked();
+  await settings.getByRole('checkbox', { name: 'Clickable links' }).check();
+  await expect(page.locator('.eventpopover-title a')).toHaveCount(2);
+  await settings.getByRole('checkbox', { name: 'Copy buttons' }).check();
+  await expect(page.locator('.pcal-copy-bar')).toHaveCount(1);
+});
+
+test('delete shortcut is configurable, toggleable, and survives older saved settings', async ({ calendar: { page, id, evaluate }, context }) => {
+  await evaluate(`chrome.storage.local.set({ shortcuts: { edit: ProtonCalentterShortcuts.defaults.edit, save: ProtonCalentterShortcuts.defaults.save } })`);
+  const settings = await context.newPage();
+  await settings.goto(`chrome-extension://${id}/settings.html`);
+  await expect(settings.locator('#delete')).toHaveText('Cmd + Shift + R');
+  await settings.locator('#delete').click();
+  await settings.keyboard.press('Alt+d');
+  await expect(settings.locator('#status')).toHaveText('Saved');
+  await page.bringToFront();
+  await installDeletion(page);
+  await page.keyboard.press('Alt+d');
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '1');
+  await settings.bringToFront();
+  await settings.getByRole('checkbox', { name: 'Delete shortcut', exact: true }).uncheck();
+  await expect(settings.locator('#delete')).toBeDisabled();
+  await page.bringToFront();
+  await page.keyboard.press('Alt+d');
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '1');
+});
+
+test('pending deletion stops when the feature is disabled', async ({ calendar: { page, evaluate } }) => {
+  await installDeletion(page, { delay: 200 });
+  await page.keyboard.press('Meta+Shift+r');
+  await evaluate(`chrome.storage.local.set({ features: { delete: false } })`);
+  await expect(page.locator('.confirm-delete')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '0');
+});
+
+test('pending deletion expires instead of confirming a late dialog', async ({ calendar: { page } }) => {
+  await installDeletion(page, { delay: 3200 });
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('.confirm-delete')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '0');
 });

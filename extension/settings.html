@@ -4,12 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Proton Calentter</title>
+  <link rel="icon" href="icons/calendar-32.png">
   <link rel="stylesheet" href="settings.css">
   <script src="shortcuts.js" defer></script>
   <script src="settings.js" defer></script>
 </head>
 <body>
-  <main aria-label="Keyboard shortcuts">
+  <main aria-label="Settings">
+    <div class="features" aria-label="Features">
+      <label><input type="checkbox" data-feature="links" disabled>Clickable links</label>
+      <label><input type="checkbox" data-feature="copy" disabled>Copy buttons</label>
+      <label><input type="checkbox" data-feature="save" disabled>Save shortcut</label>
+      <label><input type="checkbox" data-feature="edit" disabled>Edit shortcut</label>
+      <label title="Delete and confirm using Proton's selected scope"><input type="checkbox" data-feature="delete" disabled>Delete shortcut</label>
+    </div>
     <div class="row">
       <label id="save-label">Save description</label>
       <button class="shortcut" id="save" aria-labelledby="save-label save" title="Change shortcut" disabled></button>
@@ -17,6 +25,10 @@
     <div class="row">
       <label id="edit-label">Edit event</label>
       <button class="shortcut" id="edit" aria-labelledby="edit-label edit" title="Change shortcut" disabled></button>
+    </div>
+    <div class="row">
+      <label id="delete-label">Delete event</label>
+      <button class="shortcut" id="delete" aria-labelledby="delete-label delete" title="Change shortcut" disabled></button>
     </div>
     <footer>
       <span id="status" role="status" aria-live="polite"></span>
