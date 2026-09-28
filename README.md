@@ -5,6 +5,7 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 - Click links in event titles.
 - Copy an event's title, description, or both from its preview card.
 - Press **Cmd + Enter** in the description field to save.
+- Press **Enter** in any other field of the full event editor to save.
 - Press **E** with an event card open to edit it.
 - Press **Cmd + Shift + R** to delete and confirm from the preview card, compact editor, or full editor.
 - Enable or disable each feature using the checkboxes at the top of settings. All features start enabled.
@@ -25,6 +26,8 @@ No build step or Tampermonkey installation is needed. After updating the files, 
 Click a shortcut in the popup, then press its replacement. Changes save automatically and apply to already-open calendar tabs. **Esc** cancels; the reset icon restores the defaults. On Windows/Linux, set the save shortcut to **Ctrl + Enter** if preferred. Chrome or your operating system may reserve some key combinations.
 
 Save only runs while editing the event description, in either editor size. It clicks that form's Save button and preserves Proton's validation and recurring-event prompts. Edit ignores text inputs, open dialogs, hidden cards, and disabled or busy buttons. Holding a shortcut does not repeatedly trigger it.
+
+In the full editor, plain **Enter** also saves from any field except the description (where it adds a new line). It skips buttons, links, dropdowns, and fields where Proton already handles Enter itself, such as guest suggestions. It follows the save feature toggle.
 
 The delete shortcut clicks the event's Delete button and confirms the resulting event-deletion prompt, using Proton's currently selected scope (including its default recurring-event choice). From the compact editor, it opens **More options** first because that card has no Delete button. It also works while typing in an event editor with the default modified shortcut. It never searches other cards behind a dialog. New user input, leaving the tab, disabling deletion, or a three-second timeout cancels any pending steps. Delete recognition in editors and confirmations currently requires Proton's English labels. A disabled delete shortcut leaves the key combination to the browser, where Cmd + Shift + R normally reloads the page.
 

@@ -144,6 +144,26 @@ test('Command-Enter saves current description through the same form button', asy
   await expect(page.locator('body')).toHaveAttribute('data-saves', '1');
 });
 
+test('Enter saves the full editor from fields other than the description', async ({ calendar: { page } }) => {
+  await openEditor(page);
+  await page.locator('#event-guest-input').evaluate(input => input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') event.preventDefault();
+  }));
+  await page.locator('#event-guest-input').focus();
+  await page.keyboard.press('Enter');
+  await page.locator('#event-description-input').focus();
+  await page.keyboard.press('Enter');
+  await page.locator('.modal-two-footer button[type="button"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '0');
+  await page.locator('#event-location-input').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '1');
+  await page.locator('#event-title-input').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '2');
+});
+
 test('save ignores disabled, busy, repeated and composing shortcuts', async ({ calendar: { page } }) => {
   await openEditor(page);
   const save = page.getByTestId('create-event-modal:save');
