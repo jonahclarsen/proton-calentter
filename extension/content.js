@@ -262,12 +262,15 @@
   let cancelEdit;
   function navigateThenEdit(card, navigate) {
     const title = getTitle(card);
-    const existing = new Set(document.querySelectorAll('.eventpopover'));
+    const existing = new Set([...document.querySelectorAll('.eventpopover')].filter(visible));
     const observer = new MutationObserver(advance);
-    const timer = setTimeout(cancel, 3000);
+    // React can populate the card in stages, and CSS visibility can change without a mutation.
+    const retry = setInterval(advance, 50);
+    const timer = setTimeout(cancel, 8000);
     function cancel() {
       observer.disconnect();
       clearTimeout(timer);
+      clearInterval(retry);
       document.removeEventListener('pointerdown', cancel, true);
       document.removeEventListener('visibilitychange', cancel);
       window.removeEventListener('blur', cancel);
@@ -279,9 +282,10 @@
       if (!next) return;
       // Follow only the navigated event, not another card already on screen.
       if (next !== card && existing.has(next)) return cancel();
-      if (getTitle(next) !== title) return cancel();
       const edit = next.querySelector('[data-testid="event-popover:edit"]');
-      if (!available(edit)) return;
+      const nextTitle = getTitle(next);
+      if (!available(edit) || !nextTitle) return;
+      if (nextTitle !== title) return cancel();
       cancel();
       edit.click();
     }
@@ -289,7 +293,7 @@
     document.addEventListener('pointerdown', cancel, true);
     document.addEventListener('visibilitychange', cancel);
     window.addEventListener('blur', cancel);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
     navigate.click();
     advance();
   }

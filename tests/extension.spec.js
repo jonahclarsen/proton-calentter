@@ -532,7 +532,7 @@ for (const interruption of ['Escape', 'pointer', 'disable', 'different event', '
     if (interruption === 'Escape') await page.keyboard.press('Escape');
     if (interruption === 'pointer') await page.locator('#search').click();
     if (interruption === 'disable') await evaluate('chrome.storage.local.set({ features: { edit: false } })');
-    if (interruption === 'timeout') await page.waitForTimeout(3100);
+    if (interruption === 'timeout') await page.waitForTimeout(8100);
     await page.evaluate(different => {
       window.finishNavigation();
       if (different) document.querySelector('.eventpopover-title').setAttribute('title', 'Another synthetic event');
@@ -554,4 +554,47 @@ test('navigation can be disabled and rebound', async ({ calendar: { page, evalua
   await expect(page.locator('body')).toHaveAttribute('data-navigations', '0');
   await page.keyboard.press('Alt+n');
   await expect(page.locator('body')).toHaveAttribute('data-navigations', '1');
+});
+
+
+test('search edit waits for a partially rendered event title', async ({ calendar: { page } }) => {
+  await searchPreview(page, true);
+  await page.keyboard.press('e');
+  await page.evaluate(() => {
+    window.finishNavigation();
+    const title = document.querySelector('.eventpopover-title');
+    const value = title.getAttribute('title');
+    title.removeAttribute('title');
+    title.textContent = '';
+    setTimeout(() => { title.textContent = value; }, 250);
+  });
+  await expect(page.locator('body')).toHaveAttribute('data-edits', '1');
+});
+
+test('search edit retries after a visibility animation without DOM changes', async ({ calendar: { page } }) => {
+  await searchPreview(page, true);
+  await page.keyboard.press('e');
+  await page.evaluate(() => {
+    window.finishNavigation();
+    const style = document.createElement('style');
+    style.textContent = `@keyframes reveal-edit {
+      from { visibility: hidden; } to { visibility: visible; }
+    }
+    [data-testid="event-popover:edit"] { animation: reveal-edit 300ms step-end forwards; }`;
+    document.head.append(style);
+  });
+  await expect(page.locator('body')).toHaveAttribute('data-edits', '1');
+});
+
+test('search edit waits through navigation longer than three seconds', async ({ calendar: { page } }) => {
+  await searchPreview(page, true);
+  await page.keyboard.press('e');
+  await page.evaluate(() => {
+    const source = document.querySelector('.eventpopover');
+    const next = source.cloneNode(true);
+    next.querySelector('[data-testid="event-popover:open"]').dataset.testid = 'event-popover:edit';
+    source.remove();
+    setTimeout(() => { document.body.append(next); next.focus(); }, 3200);
+  });
+  await expect(page.locator('body')).toHaveAttribute('data-edits', '1');
 });
