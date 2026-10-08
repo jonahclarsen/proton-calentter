@@ -53,6 +53,8 @@ pnpm test
 
 The browser tests load the actual unpacked extension into Chromium and serve synthetic calendar markup locally through request interception. They cover linkification, copying, SPA updates, all three deletion views, confirmation scope and cancellation, feature toggles, keyboard safeguards, settings persistence, and both color schemes. Clipboard calls are stubbed inside the extension's isolated world so tests do not change your clipboard. No Proton login or personal event data is needed.
 
+The macOS Codex sandbox used for this project blocks Chromium from launching; agents should run browser tests with approved execution outside that sandbox. A launch failure reporting `Target page, context or browser has been closed`, `SIGABRT`, and `kill EPERM` occurs before test assertions run. In unfamiliar environments, `pnpm test --max-failures=1` stops quickly for diagnosis. `pnpm check` works inside the sandbox.
+
 `extension/` contains all installable files. `tests/` contains synthetic fixtures and browser tests. There is no local server or development port.
 
 This is an unofficial extension, unaffiliated with Proton. It relies on Proton Calendar's page markup; a future Proton UI update may require selector changes. Automated tests validate representative markup, not a signed-in live account.
