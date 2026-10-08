@@ -255,7 +255,7 @@ test('shortcut capture cancels and prevents duplicate bindings', async ({ calend
 
 test('settings follow light/dark mode without overflowing', async ({ calendar: { id }, context }, testInfo) => {
   const settings = await context.newPage();
-  await settings.setViewportSize({ width: 342, height: 380 });
+  await settings.setViewportSize({ width: 342, height: 480 });
   await settings.goto(`chrome-extension://${id}/settings.html`);
   await expect(settings.locator('#save')).toHaveText('Cmd + Enter');
   for (const mode of ['light', 'dark']) {
@@ -403,17 +403,18 @@ test('repeated delete shortcut triggers only one action', async ({ calendar: { p
 test('all feature checkboxes apply immediately and persist', async ({ calendar: { page, id }, context }) => {
   const settings = await context.newPage();
   await settings.goto(`chrome-extension://${id}/settings.html`);
-  await expect(settings.getByRole('checkbox')).toHaveCount(5);
+  await expect(settings.getByRole('checkbox')).toHaveCount(6);
   await settings.getByRole('checkbox', { name: 'Clickable links' }).uncheck();
   await expect(page.locator('.eventpopover-title a')).toHaveCount(0);
   await settings.getByRole('checkbox', { name: 'Copy buttons' }).uncheck();
   await expect(page.locator('.pcal-copy-bar')).toHaveCount(0);
-  for (const name of ['Save shortcut', 'Edit shortcut', 'Delete shortcut']) {
+  for (const name of ['Save shortcut', 'Edit shortcut', 'Delete shortcut', 'Navigate shortcut']) {
     await settings.getByRole('checkbox', { name, exact: true }).uncheck();
   }
   await expect(settings.locator('#save')).toBeDisabled();
   await expect(settings.locator('#edit')).toBeDisabled();
   await expect(settings.locator('#delete')).toBeDisabled();
+  await expect(settings.locator('#navigate')).toBeDisabled();
   await page.bringToFront();
   await page.locator('.eventpopover').focus();
   await page.keyboard.press('e');
@@ -467,4 +468,90 @@ test('pending deletion expires instead of confirming a late dialog', async ({ ca
   await page.keyboard.press('Meta+Shift+r');
   await expect(page.locator('.confirm-delete')).toBeVisible();
   await expect(page.locator('body')).toHaveAttribute('data-deletes', '0');
+});
+
+async function searchPreview(page, delayed = false) {
+  await page.evaluate(delayed => {
+    const card = document.querySelector('.eventpopover');
+    const button = card.querySelector('[data-testid="event-popover:edit"]');
+    button.dataset.testid = 'event-popover:open';
+    button.textContent = 'Navigate to event';
+    document.body.dataset.navigations = '0';
+    window.finishNavigation = () => {
+      const next = card.cloneNode(true);
+      const edit = next.querySelector('[data-testid="event-popover:open"]');
+      edit.dataset.testid = 'event-popover:edit';
+      edit.textContent = 'Edit';
+      card.replaceWith(next);
+      next.focus();
+    };
+    button.onclick = () => {
+      document.body.dataset.navigations = String(Number(document.body.dataset.navigations) + 1);
+      if (!delayed) setTimeout(window.finishNavigation, 20);
+    };
+    card.focus();
+  }, delayed);
+}
+
+test('E navigates from search and edits the resulting event once', async ({ calendar: { page } }) => {
+  await searchPreview(page);
+  await page.keyboard.press('e');
+  await expect(page.locator('body')).toHaveAttribute('data-navigations', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-edits', '1');
+});
+
+test('Enter navigates from search without editing', async ({ calendar: { page } }) => {
+  await searchPreview(page);
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('event-popover:edit')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-navigations', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-edits', '0');
+});
+
+test('search shortcuts respect typing, modifiers, busy buttons and dialogs', async ({ calendar: { page } }) => {
+  await searchPreview(page, true);
+  await page.keyboard.press('Meta+Enter');
+  await page.locator('#search').focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('e');
+  await page.locator('.eventpopover').focus();
+  await page.getByTestId('event-popover:open').evaluate(button => button.setAttribute('aria-busy', 'true'));
+  await page.keyboard.press('e');
+  await page.keyboard.press('Enter');
+  await page.getByTestId('event-popover:open').evaluate(button => button.setAttribute('aria-busy', 'false'));
+  await openEditor(page);
+  await page.getByRole('button', { name: 'Cancel', exact: true }).focus();
+  await page.keyboard.press('e');
+  await expect(page.locator('body')).toHaveAttribute('data-navigations', '0');
+});
+
+for (const interruption of ['Escape', 'pointer', 'disable', 'different event', 'timeout']) {
+  test(`pending search edit cancels on ${interruption}`, async ({ calendar: { page, evaluate } }) => {
+    await searchPreview(page, true);
+    await page.keyboard.press('e');
+    if (interruption === 'Escape') await page.keyboard.press('Escape');
+    if (interruption === 'pointer') await page.locator('#search').click();
+    if (interruption === 'disable') await evaluate('chrome.storage.local.set({ features: { edit: false } })');
+    if (interruption === 'timeout') await page.waitForTimeout(3100);
+    await page.evaluate(different => {
+      window.finishNavigation();
+      if (different) document.querySelector('.eventpopover-title').setAttribute('title', 'Another synthetic event');
+    }, interruption === 'different event');
+    await page.waitForTimeout(100);
+    await expect(page.locator('body')).toHaveAttribute('data-edits', '0');
+  });
+}
+
+test('navigation can be disabled and rebound', async ({ calendar: { page, evaluate } }) => {
+  await searchPreview(page, true);
+  await evaluate('chrome.storage.local.set({ features: { navigate: false } })');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-navigations', '0');
+  await evaluate(`chrome.storage.local.set({ features: { navigate: true }, shortcuts: {
+    navigate: { key: 'n', meta: false, ctrl: false, alt: true, shift: false }
+  } })`);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-navigations', '0');
+  await page.keyboard.press('Alt+n');
+  await expect(page.locator('body')).toHaveAttribute('data-navigations', '1');
 });

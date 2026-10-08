@@ -6,7 +6,8 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 - Copy an event's title, description, or both from its preview card.
 - Press **Cmd + Enter** in the description field to save.
 - Press **Enter** in any other field of the full event editor to save.
-- Press **E** with an event card open to edit it.
+- Press **E** with an event card open to edit it, including previews opened from search.
+- Press **Enter** in a search-result preview to navigate to the event.
 - Press **Cmd + Shift + R** to delete and confirm from the preview card, compact editor, or full editor.
 - Enable or disable each feature using the checkboxes at the top of settings. All features start enabled.
 - Change shortcuts from the extension's toolbar popup or extension options. Settings follow your system's light/dark mode; event buttons use Proton's own styling.
@@ -25,7 +26,7 @@ No build step or Tampermonkey installation is needed. After updating the files, 
 
 Click a shortcut in the popup, then press its replacement. Changes save automatically and apply to already-open calendar tabs. **Esc** cancels; the reset icon restores the defaults. On Windows/Linux, set the save shortcut to **Ctrl + Enter** if preferred. Chrome or your operating system may reserve some key combinations.
 
-Save only runs while editing the event description, in either editor size. It clicks that form's Save button and preserves Proton's validation and recurring-event prompts. Edit ignores text inputs, open dialogs, hidden cards, and disabled or busy buttons. Holding a shortcut does not repeatedly trigger it.
+Save only runs while editing the event description, in either editor size. It clicks that form's Save button and preserves Proton's validation and recurring-event prompts. Edit ignores text inputs, open dialogs, hidden cards, and disabled or busy buttons. Holding a shortcut does not repeatedly trigger it. From a search preview, Edit navigates to the event and automatically clicks Edit on its resulting card. New keyboard or pointer input, leaving the tab, disabling Edit, or a three-second timeout cancels the pending edit. Enter navigates without editing and preserves typing and focused controls; its shortcut and feature toggle are configurable.
 
 In the full editor, plain **Enter** also saves from any field except the description (where it adds a new line). It skips buttons, links, dropdowns, and fields where Proton already handles Enter itself, such as guest suggestions. It follows the save feature toggle.
 

@@ -16,6 +16,7 @@
       <label><input type="checkbox" data-feature="copy" disabled>Copy buttons</label>
       <label><input type="checkbox" data-feature="save" disabled>Save shortcut</label>
       <label><input type="checkbox" data-feature="edit" disabled>Edit shortcut</label>
+      <label><input type="checkbox" data-feature="navigate" disabled>Navigate shortcut</label>
       <label title="Delete and confirm using Proton's selected scope"><input type="checkbox" data-feature="delete" disabled>Delete shortcut</label>
     </div>
     <div class="row">
@@ -29,6 +30,10 @@
     <div class="row">
       <label id="delete-label">Delete event</label>
       <button class="shortcut" id="delete" aria-labelledby="delete-label delete" title="Change shortcut" disabled></button>
+    </div>
+    <div class="row">
+      <label id="navigate-label">Navigate to event</label>
+      <button class="shortcut" id="navigate" aria-labelledby="navigate-label navigate" title="Change shortcut" disabled></button>
     </div>
     <footer>
       <span id="status" role="status" aria-live="polite"></span>

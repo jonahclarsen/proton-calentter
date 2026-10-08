@@ -3,6 +3,7 @@
 
   const defaults = {
     save: { key: 'Enter', meta: true, ctrl: false, alt: false, shift: false },
+    navigate: { key: 'Enter', meta: false, ctrl: false, alt: false, shift: false },
     edit: { key: 'e', meta: false, ctrl: false, alt: false, shift: false },
     delete: { key: 'r', meta: true, ctrl: false, alt: false, shift: true }
   };

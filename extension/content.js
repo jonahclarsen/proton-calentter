@@ -14,6 +14,7 @@
     if (area === 'local' && changes.features) {
       features = shortcutsAPI.normalizeFeatures(changes.features.newValue);
       if (!features.delete) cancelDelete?.();
+      if (!features.edit) cancelEdit?.();
       document.querySelectorAll('.eventpopover').forEach(enhance);
     }
   });
@@ -254,8 +255,51 @@
     first.click();
     advance();
   }
+  function activeCard(target) {
+    if ([...document.querySelectorAll('.modal-two, .modal-two-dialog-container, [role="dialog"], [aria-modal="true"]')].some(visible)) return null;
+    return activeSurface(target);
+  }
+  let cancelEdit;
+  function navigateThenEdit(card, navigate) {
+    const title = getTitle(card);
+    const existing = new Set(document.querySelectorAll('.eventpopover'));
+    const observer = new MutationObserver(advance);
+    const timer = setTimeout(cancel, 3000);
+    function cancel() {
+      observer.disconnect();
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('visibilitychange', cancel);
+      window.removeEventListener('blur', cancel);
+      cancelEdit = null;
+    }
+    function advance() {
+      if (!features.edit) return cancel();
+      const next = activeCard(document.activeElement);
+      if (!next) return;
+      // Follow only the navigated event, not another card already on screen.
+      if (next !== card && existing.has(next)) return cancel();
+      if (getTitle(next) !== title) return cancel();
+      const edit = next.querySelector('[data-testid="event-popover:edit"]');
+      if (!available(edit)) return;
+      cancel();
+      edit.click();
+    }
+    cancelEdit = cancel;
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('visibilitychange', cancel);
+    window.addEventListener('blur', cancel);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    navigate.click();
+    advance();
+  }
   // Wait for saved preferences before allowing shortcuts.
   settingsReady.then(() => document.addEventListener('keydown', event => {
+    if (cancelEdit) {
+      if (['Meta', 'Control', 'Alt', 'Shift', 'AltGraph'].includes(event.key)) return;
+      if (event.repeat) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+      cancelEdit();
+    }
     if (cancelDelete) {
       if (['Meta', 'Control', 'Alt', 'Shift', 'AltGraph'].includes(event.key)) return;
       if (shortcutsAPI.matches(event, shortcuts.delete)) {
@@ -285,11 +329,21 @@
         target.id === 'event-description-input' && !target.readOnly && !target.disabled) {
       button = target.closest('form')?.querySelector('[data-testid="create-event-modal:save"], [data-testid="create-event-popover:save"]');
     } else if (features.edit && shortcutsAPI.matches(event, shortcuts.edit) && !typing(target) && !typing(document.activeElement)) {
-      if ([...document.querySelectorAll('.modal-two, .modal-two-dialog-container, [role="dialog"], [aria-modal="true"]')].some(visible)) return;
-      const popovers = [...document.querySelectorAll('.eventpopover')].filter(visible);
-      const popover = target instanceof Element ? target.closest('.eventpopover') : null;
-      const active = popover && visible(popover) ? popover : popovers.length === 1 ? popovers[0] : null;
+      const active = activeCard(target);
       button = active?.querySelector('[data-testid="event-popover:edit"]');
+      if (!button) {
+        const navigate = active?.querySelector('[data-testid="event-popover:open"]');
+        if (!available(navigate)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        navigateThenEdit(active, navigate);
+        return;
+      }
+    } else if (features.navigate && shortcutsAPI.matches(event, shortcuts.navigate) &&
+        !typing(target) && !typing(document.activeElement)) {
+      // Preserve native activation of focused links and controls.
+      if (target instanceof Element && target.closest('button, a, summary, [role="button"], [role="menuitem"], [role="option"]')) return;
+      button = activeCard(target)?.querySelector('[data-testid="event-popover:open"]');
     }
     if (!available(button)) return;
     event.preventDefault();
