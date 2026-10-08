@@ -20,7 +20,12 @@
   });
 
   const bars = new WeakMap();
-  const urlPattern = /https?:\/\/[^\s<>"']+|www\.[^\s<>"']+/gi;
+  const urlPattern = /\b[a-z][a-z0-9+.-]*:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/gi;
+  const blockedProtocols = new Set([
+    'javascript:', 'vbscript:', 'data:', 'blob:', 'file:', 'filesystem:',
+    'about:', 'chrome:', 'chrome-extension:', 'chrome-untrusted:',
+    'edge:', 'resource:', 'view-source:'
+  ]);
 
   function trimURL(raw) {
     let url = raw.replace(/[.,;:!?]+$/, '');
@@ -30,8 +35,8 @@
     return url.replace(/[.,;:!?]+$/, '');
   }
 
-  function linkify(title) {
-    const walker = document.createTreeWalker(title, NodeFilter.SHOW_TEXT, {
+  function linkify(element) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
       acceptNode: node => node.parentElement.closest('a, script, style') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
     });
     const nodes = [];
@@ -43,12 +48,16 @@
       for (const match of text.matchAll(urlPattern)) {
         const display = trimURL(match[0]);
         const href = /^www\./i.test(display) ? `https://${display}` : display;
-        try { if (!['http:', 'https:'].includes(new URL(href).protocol)) continue; } catch { continue; }
+        let protocol;
+        try {
+          protocol = new URL(href).protocol;
+          if (blockedProtocols.has(protocol)) continue;
+        } catch { continue; }
         fragment.append(document.createTextNode(text.slice(end, match.index)));
         const link = document.createElement('a');
         link.href = href;
         link.textContent = display;
-        link.target = '_blank';
+        if (protocol === 'http:' || protocol === 'https:') link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.dataset.pcalLink = '';
         link.addEventListener('click', event => event.stopPropagation());
@@ -129,9 +138,9 @@
   function enhance(popover) {
     if (!popover.isConnected) return;
     const title = popover.querySelector('.eventpopover-title');
-    if (title) {
-      if (features.links) linkify(title);
-      else title.querySelectorAll('a[data-pcal-link]').forEach(link => link.replaceWith(...link.childNodes));
+    for (const element of popover.querySelectorAll('.eventpopover-title, .text-pre-wrap')) {
+      if (features.links) linkify(element);
+      else element.querySelectorAll('a[data-pcal-link]').forEach(link => link.replaceWith(...link.childNodes));
     }
     if (!features.copy) { bars.get(popover)?.remove(); bars.delete(popover); return; }
     const body = popover.querySelector('.eventpopover-header')?.nextElementSibling;

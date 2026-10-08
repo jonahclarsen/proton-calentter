@@ -83,6 +83,60 @@ test('linkifies URLs without altering text or nesting existing links', async ({ 
   expect(await page.evaluate(() => window.bubbled)).toBe(false);
 });
 
+test('links app URLs in titles and descriptions and respects the feature toggle', async ({ calendar: { page, evaluate } }) => {
+  const title = page.locator('.eventpopover-title');
+  const description = page.locator('.text-pre-wrap');
+  await title.evaluate(element => { element.textContent = 'Listen (plinth://playlist/).'; });
+  const text = 'Play plinth://playlist/\nOpen obsidian://open?vault=Notes&file=Plans and https://example.com.';
+  await description.evaluate((element, text) => {
+    element.textContent = text;
+    const existing = document.createElement('a');
+    existing.href = 'plinth://existing/';
+    existing.textContent = 'Existing';
+    element.append(existing);
+  }, text);
+  await expect(title.locator('a')).toHaveAttribute('href', 'plinth://playlist/');
+  await expect(title).toHaveText('Listen (plinth://playlist/).');
+  await expect(description.locator('a')).toHaveCount(4);
+  await expect(description.locator('a').nth(0)).toHaveAttribute('href', 'plinth://playlist/');
+  await expect(description.locator('a').nth(1)).toHaveAttribute('href', 'obsidian://open?vault=Notes&file=Plans');
+  await expect(description.locator('a').nth(2)).toHaveAttribute('target', '_blank');
+  expect(await title.locator('a').getAttribute('target')).toBeNull();
+  await expect(description.locator('a a')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Copy description', exact: true }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-clipboard', text + 'Existing');
+  // Exercise the link click without launching an installed application.
+  await description.evaluate(element => {
+    document.body.dataset.appClickBubbled = 'false';
+    element.closest('.eventpopover').addEventListener('click', () => { document.body.dataset.appClickBubbled = 'true'; });
+    const link = element.querySelector('a');
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      document.body.dataset.appHref = link.href;
+    });
+    link.click();
+  });
+  await expect(page.locator('body')).toHaveAttribute('data-app-href', 'plinth://playlist/');
+  await expect(page.locator('body')).toHaveAttribute('data-app-click-bubbled', 'false');
+  await evaluate('chrome.storage.local.set({ features: { links: false } })');
+  await expect(title.locator('a')).toHaveCount(0);
+  await expect(description.locator('a')).toHaveCount(1);
+  await expect(description.locator('a')).toHaveAttribute('href', 'plinth://existing/');
+  await evaluate('chrome.storage.local.set({ features: { links: true } })');
+  await expect(title.locator('a')).toHaveCount(1);
+  await expect(description.locator('a')).toHaveCount(4);
+});
+
+test('does not link executable, local-file, or browser-internal URLs', async ({ calendar: { page } }) => {
+  const description = page.locator('.text-pre-wrap');
+  const text = 'javascript://alert(1) JAVASCRIPT://alert(1) vbscript://run data://payload file:///tmp/example chrome://settings chrome-extension://example/page blob://example filesystem://example about://blank plinth://playlist/';
+  await description.evaluate((element, text) => { element.textContent = text; }, text);
+  // Wait for linkification so a pre-observer assertion cannot pass accidentally.
+  await expect(description.locator('a')).toHaveCount(1);
+  await expect(description.locator('a')).toHaveAttribute('href', 'plinth://playlist/');
+  await expect(description).toHaveText(text);
+});
+
 test('copies fresh title, multiline description, and both', async ({ calendar: { page } }) => {
   await page.getByRole('button', { name: 'Copy title', exact: true }).click();
   await expect(page.locator('body')).toHaveAttribute('data-clipboard', 'Planning https://example.com/notes and WWW.example.org');

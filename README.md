@@ -2,7 +2,7 @@
 
 Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 
-- Click links in event titles.
+- Click web and app links in event titles and descriptions, including `plinth://playlist/`.
 - Copy an event's title, description, or both from its preview card.
 - Press **Cmd + Enter** in the description field to save.
 - Press **Enter** in any other field of the full event editor to save.
@@ -20,7 +20,7 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 4. Disable the two original Tampermonkey scripts to avoid duplicate controls.
 5. Refresh Proton Calendar. Pin **Proton Calentter** in Chrome's extensions menu for easy access to settings.
 
-No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.1.2**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
+No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.1.3**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
 
 ## Shortcuts
 
@@ -34,13 +34,13 @@ The delete shortcut clicks the event's Delete button and confirms the resulting 
 
 Disabling links or copy buttons removes the extension's additions from already-open cards immediately. Shortcut settings and feature toggles persist locally; resetting shortcuts leaves feature toggles unchanged. Disable any older Karabiner mapping for the same shortcut so the keys reach the extension.
 
-Copy buttons read the current event at click time and preserve description line breaks. Description and combined-copy buttons are disabled when there is no description. Links open in a new tab.
+Copy buttons read the current event at click time and preserve description line breaks. Description and combined-copy buttons are disabled when there is no description. Web links open in a new tab. App links using `scheme://` URLs open through the browser’s registered app handler; Chrome may ask you to confirm opening the app. Executable, local-file, and browser-internal URLs are not linked.
 
 ## Privacy
 
 The extension runs only on `https://calendar.proton.me/*`. All processing is local. It makes no network requests, collects no analytics, and stores only your shortcut preferences and feature toggles locally. It accesses displayed event text to add links and copy text when requested.
 
-Permissions: `clipboardWrite` for copying and `storage` for shortcuts. It does not read your clipboard or request account credentials. There is no background service or external runtime dependency. Opening a title link navigates to the URL you clicked as usual.
+Permissions: `clipboardWrite` for copying and `storage` for shortcuts. It does not read your clipboard or request account credentials. There is no background service or external runtime dependency. Opening a link navigates to the URL or launches the registered app you clicked as usual.
 
 ## Development
 
