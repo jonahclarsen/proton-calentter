@@ -477,6 +477,13 @@ async function searchPreview(page, delayed = false) {
     button.dataset.testid = 'event-popover:open';
     button.textContent = 'Navigate to event';
     document.body.dataset.navigations = '0';
+    document.addEventListener('click', event => {
+      if (!event.target.closest('[data-testid="event-popover:edit"]')) return;
+      if (window.ignoreNextEdit) { window.ignoreNextEdit = false; return; }
+      if (!document.querySelector('#event-title-input')) {
+        document.body.append(document.querySelector('#editor').content.cloneNode(true));
+      }
+    });
     window.finishNavigation = () => {
       const next = card.cloneNode(true);
       const edit = next.querySelector('[data-testid="event-popover:open"]');
@@ -597,4 +604,18 @@ test('search edit waits through navigation longer than three seconds', async ({ 
     setTimeout(() => { document.body.append(next); next.focus(); }, 3200);
   });
   await expect(page.locator('body')).toHaveAttribute('data-edits', '1');
+});
+
+
+test('search edit retries an ignored click until the editor opens, then stops', async ({ calendar: { page } }) => {
+  await searchPreview(page, true);
+  await page.evaluate(() => { window.ignoreNextEdit = true; });
+  await page.keyboard.press('e');
+  await page.evaluate(() => window.finishNavigation());
+  await expect(page.locator('#event-title-input')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-edits', '2');
+  // Closing the successfully opened editor must not restart automatic editing.
+  await page.locator('#event-title-input').evaluate(input => input.closest('form').remove());
+  await page.waitForTimeout(700);
+  await expect(page.locator('body')).toHaveAttribute('data-edits', '2');
 });

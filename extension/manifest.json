@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Proton Calentter",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Better Proton Calendar: clickable title links, copy buttons, and customizable edit/save shortcuts.",
   "permissions": ["clipboardWrite", "storage"],
   "icons": { "16": "icons/calendar-16.png", "32": "icons/calendar-32.png", "48": "icons/calendar-48.png", "128": "icons/calendar-128.png" },

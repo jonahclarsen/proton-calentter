@@ -263,6 +263,7 @@
   function navigateThenEdit(card, navigate) {
     const title = getTitle(card);
     const existing = new Set([...document.querySelectorAll('.eventpopover')].filter(visible));
+    let lastAttempt = 0;
     const observer = new MutationObserver(advance);
     // React can populate the card in stages, and CSS visibility can change without a mutation.
     const retry = setInterval(advance, 50);
@@ -278,6 +279,9 @@
     }
     function advance() {
       if (!features.edit) return cancel();
+      if ([...document.querySelectorAll('#event-title-input')].some(visible)) return cancel();
+      // Once Edit opens any dialog, leave its prompts and focus to Proton.
+      if (lastAttempt && [...document.querySelectorAll('.modal-two, .modal-two-dialog-container, [role="dialog"], [aria-modal="true"]')].some(visible)) return cancel();
       const next = activeCard(document.activeElement);
       if (!next) return;
       // Follow only the navigated event, not another card already on screen.
@@ -286,7 +290,10 @@
       const nextTitle = getTitle(next);
       if (!available(edit) || !nextTitle) return;
       if (nextTitle !== title) return cancel();
-      cancel();
+      // A rendered button can appear before Proton is ready to handle its click.
+      // Keep the operation pending until an editor opens; throttle unsuccessful attempts.
+      if (performance.now() - lastAttempt < 300) return;
+      lastAttempt = performance.now();
       edit.click();
     }
     cancelEdit = cancel;
