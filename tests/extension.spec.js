@@ -218,6 +218,29 @@ test('Enter saves the full editor from fields other than the description', async
   await expect(page.locator('body')).toHaveAttribute('data-saves', '2');
 });
 
+test('Enter saves the full editor when nothing is focused or selected', async ({ calendar: { page } }) => {
+  await openEditor(page);
+  await page.locator('#search').focus();
+  await page.keyboard.press('Enter');
+  await page.evaluate(() => {
+    document.activeElement.blur();
+    document.getSelection().selectAllChildren(document.querySelector('.eventpopover-title'));
+  });
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '0');
+  await page.evaluate(() => document.getSelection().removeAllRanges());
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '1');
+  await page.evaluate(() => {
+    const prompt = document.createElement('div');
+    prompt.setAttribute('role', 'dialog');
+    prompt.textContent = 'Update recurring event';
+    document.body.append(prompt);
+  });
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '1');
+});
+
 test('save ignores disabled, busy, repeated and composing shortcuts', async ({ calendar: { page } }) => {
   await openEditor(page);
   const save = page.getByTestId('create-event-modal:save');

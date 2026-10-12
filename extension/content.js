@@ -370,8 +370,8 @@
     event.stopImmediatePropagation();
     button.click();
   }, true));
-  // Plain Enter saves the full editor from any field except the description. Runs after Proton's own
-  // handlers so fields that already use Enter (guest suggestions, pickers) keep working.
+  // Plain Enter saves the full editor from any field except the description, or when nothing is focused.
+  // Runs after Proton's own handlers so fields that already use Enter (guest suggestions, pickers) keep working.
   settingsReady.then(() => document.addEventListener('keydown', event => {
     if (!features.save || event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey ||
         event.defaultPrevented || event.repeat || event.isComposing) return;
@@ -379,7 +379,15 @@
     if (!(target instanceof HTMLElement) || target.isContentEditable || target.closest(
       'textarea, button, a, select, summary, [role="button"], [role="combobox"], [role="listbox"], [role="option"], [role="menuitem"]'
     )) return;
-    const button = target.closest('form')?.querySelector('[data-testid="create-event-modal:save"]');
+    let form = target.closest('form');
+    if (!form) {
+      // With no focused field or selected text, use the topmost dialog; never an editor behind another prompt.
+      const surface = activeSurface(target);
+      const unfocused = target === document.body || target === document.documentElement || !!surface?.contains(target);
+      if (!unfocused || !document.getSelection()?.isCollapsed) return;
+      form = surface;
+    }
+    const button = form?.querySelector('[data-testid="create-event-modal:save"]');
     if (!available(button)) return;
     event.preventDefault();
     button.click();
