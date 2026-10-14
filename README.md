@@ -21,7 +21,7 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 4. Disable the two original Tampermonkey scripts to avoid duplicate controls.
 5. Refresh Proton Calendar. Pin **Proton Calentter** in Chrome's extensions menu for easy access to settings.
 
-No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.2.0**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
+No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.2.1**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
 
 ## Shortcuts
 
