@@ -548,8 +548,8 @@ test('pending deletion expires instead of confirming a late dialog', async ({ ca
 });
 
 // Mimics Proton's React-rendered Duplicate button, its "Event deleted" notification, and the duplicate editor.
-async function installUndo(page, { vevent = { uid: { value: 'synthetic' } }, duplicate = true, notify = true } = {}) {
-  await installDeletion(page);
+async function installUndo(page, { vevent = { uid: { value: 'synthetic' } }, duplicate = true, notify = true, delay = 0 } = {}) {
+  await installDeletion(page, { delay });
   await page.evaluate(({ vevent, duplicate, notify }) => {
     document.body.dataset.duplicates = '0';
     if (duplicate) {
@@ -663,6 +663,23 @@ test('undo follows the delete feature toggle', async ({ calendar: { page, evalua
   await evaluate(`chrome.storage.local.set({ features: { delete: false } })`);
   await expect(page.locator('.pcal-undo-button')).toHaveCount(0);
   await page.keyboard.press('Meta+z');
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '0');
+});
+
+test('the captured event is forgotten when deletion is interrupted or undo ends', async ({ calendar: { page, evaluate } }) => {
+  const restoreDirectly = () => page.evaluate(() =>
+    !document.dispatchEvent(new CustomEvent('proton-calentter:undo-restore', { cancelable: true })));
+  await installUndo(page, { delay: 300 });
+  await page.keyboard.press('Meta+Shift+r');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.confirm-delete')).toBeVisible();
+  expect(await restoreDirectly()).toBe(false);
+  await page.locator('.confirm-delete').evaluate(button => button.closest('form').remove());
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('.pcal-undo-button')).toBeVisible();
+  await evaluate(`chrome.storage.local.set({ features: { delete: false } })`);
+  await expect(page.locator('.pcal-undo-button')).toHaveCount(0);
+  expect(await restoreDirectly()).toBe(false);
   await expect(page.locator('body')).toHaveAttribute('data-duplicates', '0');
 });
 

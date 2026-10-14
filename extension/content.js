@@ -13,7 +13,7 @@
     if (area === 'local' && changes.shortcuts) shortcuts = shortcutsAPI.normalize(changes.shortcuts.newValue);
     if (area === 'local' && changes.features) {
       features = shortcutsAPI.normalizeFeatures(changes.features.newValue);
-      if (!features.delete) { cancelDelete?.(); clearUndo?.(); cancelRestore?.(); }
+      if (!features.delete) { cancelDelete?.(); clearUndo?.(); cancelRestore?.(); forgetUndo(); }
       if (!features.edit) cancelEdit?.();
       document.querySelectorAll('.eventpopover').forEach(enhance);
     }
@@ -226,28 +226,32 @@
     return [...surface.querySelectorAll('button')].find(button => button.textContent.trim() === 'Delete');
   }
   let cancelDelete;
-  function startDelete(surface, first, moreOptions, onConfirm) {
+  function startDelete(surface, first, moreOptions, onConfirm, onAbort) {
     let stage = moreOptions ? 'editor' : 'confirm';
     let previous = surface;
     const existing = new Set(document.querySelectorAll('.modal-two-dialog-container, [role="dialog"], [aria-modal="true"]'));
     const observer = new MutationObserver(advance);
-    const timer = setTimeout(cancel, 3000);
+    const timer = setTimeout(abort, 3000);
     function cancel() {
       observer.disconnect();
       clearTimeout(timer);
-      document.removeEventListener('pointerdown', cancel, true);
-      document.removeEventListener('visibilitychange', cancel);
-      window.removeEventListener('blur', cancel);
+      document.removeEventListener('pointerdown', abort, true);
+      document.removeEventListener('visibilitychange', abort);
+      window.removeEventListener('blur', abort);
       cancelDelete = null;
     }
+    function abort() {
+      cancel();
+      onAbort?.();
+    }
     function advance() {
-      if (!features.delete) return cancel();
+      if (!features.delete) return abort();
       const next = activeSurface(document.activeElement);
       if (!next || next === previous) return;
       // Only follow new dialogs created by this shortcut, never a pre-existing dialog.
-      if (existing.has(next)) return cancel();
+      if (existing.has(next)) return abort();
       const button = stage === 'editor' ? editorDelete(next) : confirmationDelete(next);
-      if (!button) return cancel();
+      if (!button) return abort();
       if (!available(button)) return;
       const confirming = stage === 'confirm';
       if (confirming) cancel();
@@ -259,10 +263,10 @@
       button.click();
       if (confirming) onConfirm?.();
     }
-    cancelDelete = cancel;
-    document.addEventListener('pointerdown', cancel, true);
-    document.addEventListener('visibilitychange', cancel);
-    window.addEventListener('blur', cancel);
+    cancelDelete = abort;
+    document.addEventListener('pointerdown', abort, true);
+    document.addEventListener('visibilitychange', abort);
+    window.addEventListener('blur', abort);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
     first.click();
     advance();
@@ -271,6 +275,9 @@
   let clearUndo;
   let undoDeletion;
   let cancelRestore;
+  function forgetUndo() {
+    document.dispatchEvent(new CustomEvent('proton-calentter:undo-forget'));
+  }
   function captureUndo(card) {
     clearUndo?.();
     const duplicate = card.querySelector('[data-testid="event-popover:duplicate"]');
@@ -282,15 +289,21 @@
     clearUndo?.();
     const existing = new Set(document.querySelectorAll('.notification'));
     let notification;
-    let expires = 0;
+    let limit = 0;
     const observer = new MutationObserver(update);
     // Offer undo only once Proton reports the deletion succeeded.
-    const timer = setTimeout(() => { if (!notification) clear(); }, 10000);
-    function clear() {
+    let timer = setTimeout(clear, 10000);
+    function clear(restoring) {
       observer.disconnect();
       clearTimeout(timer);
       document.querySelectorAll('.pcal-undo-button').forEach(button => button.remove());
       clearUndo = undoDeletion = null;
+      if (!restoring) forgetUndo();
+    }
+    // Undo stays available while the notification shows, for at least ten seconds and at most one minute.
+    function expire() {
+      if (notification.isConnected && performance.now() < limit) timer = setTimeout(expire, 1000);
+      else clear();
     }
     function update() {
       if (!notification) {
@@ -298,7 +311,8 @@
           item.querySelector('.notification__content')?.textContent.trim() === 'Event deleted');
         if (!notification) return;
         clearTimeout(timer);
-        expires = performance.now() + 10000;
+        limit = performance.now() + 60000;
+        timer = setTimeout(expire, 10000);
       }
       if (!notification.isConnected || notification.querySelector('.pcal-undo-button')) return;
       const button = document.createElement('button');
@@ -314,15 +328,10 @@
       if (close) close.before(button);
       else notification.append(button);
     }
-    // Undo stays available while the notification shows, and for at least ten seconds.
     undoDeletion = () => {
       if (!notification) return false;
-      if (!notification.isConnected && performance.now() > expires) {
-        clear();
-        return false;
-      }
       const close = notification.querySelector('.notification__close-button');
-      clear();
+      clear(true);
       restoreEvent();
       close?.click();
       return true;
@@ -449,7 +458,7 @@
       if (confirm) button.click();
       else {
         const restorable = button.matches('[data-testid="event-popover:delete"]') && captureUndo(surface);
-        startDelete(surface, button, button === more, restorable ? offerUndo : undefined);
+        startDelete(surface, button, button === more, restorable ? offerUndo : undefined, restorable ? forgetUndo : undefined);
       }
       return;
     }
