@@ -547,6 +547,125 @@ test('pending deletion expires instead of confirming a late dialog', async ({ ca
   await expect(page.locator('body')).toHaveAttribute('data-deletes', '0');
 });
 
+// Mimics Proton's React-rendered Duplicate button, its "Event deleted" notification, and the duplicate editor.
+async function installUndo(page, { vevent = { uid: { value: 'synthetic' } }, duplicate = true, notify = true } = {}) {
+  await installDeletion(page);
+  await page.evaluate(({ vevent, duplicate, notify }) => {
+    document.body.dataset.duplicates = '0';
+    if (duplicate) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.testid = 'event-popover:duplicate';
+      button.textContent = 'Duplicate';
+      button.__reactProps$synthetic = { onClick: () => {
+        document.body.dataset.duplicates = String(Number(document.body.dataset.duplicates) + 1);
+        document.body.append(document.querySelector('#editor').content.cloneNode(true));
+      } };
+      button.__reactFiber$synthetic = { memoizedProps: {}, return: {
+        memoizedProps: { event: { data: { eventReadResult: { result: [{ veventComponent: vevent }] } } } }, return: null
+      } };
+      document.querySelector('.eventpopover-header').append(button);
+    }
+    if (!notify) return;
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.confirm-delete')) return;
+      document.querySelector('.eventpopover').remove();
+      setTimeout(() => {
+        const notification = document.createElement('div');
+        notification.className = 'notification notification--success';
+        notification.setAttribute('role', 'alert');
+        notification.innerHTML = '<span class="notification__content">Event deleted</span>' +
+          '<button type="button" class="notification__button notification__close-button" aria-label="Close">x</button>';
+        notification.querySelector('.notification__close-button').onclick = () => notification.remove();
+        document.body.append(notification);
+      }, 30);
+    });
+  }, { vevent, duplicate, notify });
+}
+
+test('Undo in the deletion notification restores the event and saves it', async ({ calendar: { page } }) => {
+  await installUndo(page);
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '1');
+  const undo = page.locator('.notification .pcal-undo-button');
+  await expect(undo).toHaveText('Undo');
+  await expect(page.locator('.notification button').first()).toHaveClass(/pcal-undo-button/);
+  await undo.click();
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '1');
+  await expect(page.locator('.notification')).toHaveCount(0);
+  await page.locator('#event-title-input').evaluate(input => input.closest('form').remove());
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '1');
+});
+
+test('Command-Z restores the deleted event once, but not while typing', async ({ calendar: { page } }) => {
+  await installUndo(page);
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('.pcal-undo-button')).toBeVisible();
+  await page.locator('#search').focus();
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '0');
+  await page.locator('#search').blur();
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '1');
+  await expect(page.locator('.pcal-undo-button')).toHaveCount(0);
+  await page.locator('#event-title-input').evaluate(input => input.closest('form').remove());
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '1');
+});
+
+test('interrupting a restore leaves the duplicated event unsaved', async ({ calendar: { page } }) => {
+  await installUndo(page);
+  await page.evaluate(() => {
+    const button = document.querySelector('[data-testid="event-popover:duplicate"]');
+    const open = button.__reactProps$synthetic.onClick;
+    button.__reactProps$synthetic.onClick = () => setTimeout(open, 300);
+  });
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('.pcal-undo-button')).toBeVisible();
+  await page.keyboard.press('Meta+z');
+  await page.keyboard.press('a');
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '1');
+  await expect(page.locator('#event-title-input')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-saves', '0');
+});
+
+for (const [name, options] of [
+  ['recurring', { vevent: { rrule: { value: { freq: 'WEEKLY' } } } }],
+  ['single-occurrence', { vevent: { 'recurrence-id': { value: {} } } }],
+  ['participant', { vevent: { attendee: [{ value: 'mailto:guest@example.com' }] } }],
+  ['non-duplicable', { duplicate: false }]
+]) {
+  test(`does not offer undo for ${name} events`, async ({ calendar: { page } }) => {
+    await installUndo(page, options);
+    await page.keyboard.press('Meta+Shift+r');
+    await expect(page.locator('.notification')).toBeVisible();
+    await expect(page.locator('.pcal-undo-button')).toHaveCount(0);
+    await page.keyboard.press('Meta+z');
+    await expect(page.locator('body')).toHaveAttribute('data-duplicates', '0');
+  });
+}
+
+test('undo waits for Proton to confirm the deletion', async ({ calendar: { page } }) => {
+  await installUndo(page, { notify: false });
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('body')).toHaveAttribute('data-deletes', '1');
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '0');
+});
+
+test('undo follows the delete feature toggle', async ({ calendar: { page, evaluate } }) => {
+  await installUndo(page);
+  await page.keyboard.press('Meta+Shift+r');
+  await expect(page.locator('.pcal-undo-button')).toBeVisible();
+  await evaluate(`chrome.storage.local.set({ features: { delete: false } })`);
+  await expect(page.locator('.pcal-undo-button')).toHaveCount(0);
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('body')).toHaveAttribute('data-duplicates', '0');
+});
+
 async function searchPreview(page, delayed = false) {
   await page.evaluate(delayed => {
     const card = document.querySelector('.eventpopover');

@@ -13,7 +13,7 @@
     if (area === 'local' && changes.shortcuts) shortcuts = shortcutsAPI.normalize(changes.shortcuts.newValue);
     if (area === 'local' && changes.features) {
       features = shortcutsAPI.normalizeFeatures(changes.features.newValue);
-      if (!features.delete) cancelDelete?.();
+      if (!features.delete) { cancelDelete?.(); clearUndo?.(); cancelRestore?.(); }
       if (!features.edit) cancelEdit?.();
       document.querySelectorAll('.eventpopover').forEach(enhance);
     }
@@ -226,7 +226,7 @@
     return [...surface.querySelectorAll('button')].find(button => button.textContent.trim() === 'Delete');
   }
   let cancelDelete;
-  function startDelete(surface, first, moreOptions) {
+  function startDelete(surface, first, moreOptions, onConfirm) {
     let stage = moreOptions ? 'editor' : 'confirm';
     let previous = surface;
     const existing = new Set(document.querySelectorAll('.modal-two-dialog-container, [role="dialog"], [aria-modal="true"]'));
@@ -249,12 +249,15 @@
       const button = stage === 'editor' ? editorDelete(next) : confirmationDelete(next);
       if (!button) return cancel();
       if (!available(button)) return;
-      if (stage === 'editor') {
+      const confirming = stage === 'confirm';
+      if (confirming) cancel();
+      else {
         stage = 'confirm';
         previous = next;
         existing.add(next);
-      } else cancel();
+      }
       button.click();
+      if (confirming) onConfirm?.();
     }
     cancelDelete = cancel;
     document.addEventListener('pointerdown', cancel, true);
@@ -262,6 +265,99 @@
     window.addEventListener('blur', cancel);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
     first.click();
+    advance();
+  }
+  // Undo for preview-card deletions. undo.js recreates the event through Proton's Duplicate action.
+  let clearUndo;
+  let undoDeletion;
+  let cancelRestore;
+  function captureUndo(card) {
+    clearUndo?.();
+    const duplicate = card.querySelector('[data-testid="event-popover:duplicate"]');
+    // An uncaptured event resets the page-world handler, so a stale capture can never be restored.
+    return !(duplicate || document).dispatchEvent(new CustomEvent('proton-calentter:undo-capture', { bubbles: true, cancelable: true })) &&
+      !!duplicate;
+  }
+  function offerUndo() {
+    clearUndo?.();
+    const existing = new Set(document.querySelectorAll('.notification'));
+    let notification;
+    let expires = 0;
+    const observer = new MutationObserver(update);
+    // Offer undo only once Proton reports the deletion succeeded.
+    const timer = setTimeout(() => { if (!notification) clear(); }, 10000);
+    function clear() {
+      observer.disconnect();
+      clearTimeout(timer);
+      document.querySelectorAll('.pcal-undo-button').forEach(button => button.remove());
+      clearUndo = undoDeletion = null;
+    }
+    function update() {
+      if (!notification) {
+        notification = [...document.querySelectorAll('.notification')].find(item => !existing.has(item) &&
+          item.querySelector('.notification__content')?.textContent.trim() === 'Event deleted');
+        if (!notification) return;
+        clearTimeout(timer);
+        expires = performance.now() + 10000;
+      }
+      if (!notification.isConnected || notification.querySelector('.pcal-undo-button')) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'button button-small button-ghost-weak notification__button text-bold pcal-undo-button';
+      button.textContent = 'Undo';
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        undoDeletion?.();
+      });
+      const close = notification.querySelector('.notification__close-button');
+      if (close) close.before(button);
+      else notification.append(button);
+    }
+    // Undo stays available while the notification shows, and for at least ten seconds.
+    undoDeletion = () => {
+      if (!notification) return false;
+      if (!notification.isConnected && performance.now() > expires) {
+        clear();
+        return false;
+      }
+      const close = notification.querySelector('.notification__close-button');
+      clear();
+      restoreEvent();
+      close?.click();
+      return true;
+    };
+    clearUndo = clear;
+    observer.observe(document.body, { childList: true, subtree: true });
+    update();
+  }
+  function restoreEvent() {
+    cancelRestore?.();
+    const existing = new Set(document.querySelectorAll('[data-testid="create-event-modal:save"]'));
+    if (document.dispatchEvent(new CustomEvent('proton-calentter:undo-restore', { cancelable: true }))) return;
+    const observer = new MutationObserver(advance);
+    const timer = setTimeout(cancel, 5000);
+    function cancel() {
+      observer.disconnect();
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('visibilitychange', cancel);
+      window.removeEventListener('blur', cancel);
+      cancelRestore = null;
+    }
+    // Save the editor that Duplicate opens; interruptions leave it open for the user.
+    function advance() {
+      if (!features.delete) return cancel();
+      const save = [...document.querySelectorAll('[data-testid="create-event-modal:save"]')].find(button => !existing.has(button));
+      if (!available(save) || !activeSurface(document.activeElement)?.contains(save)) return;
+      cancel();
+      save.click();
+    }
+    cancelRestore = cancel;
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('visibilitychange', cancel);
+    window.addEventListener('blur', cancel);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
     advance();
   }
   function activeCard(target) {
@@ -320,6 +416,7 @@
       if (event.repeat) { event.preventDefault(); event.stopImmediatePropagation(); return; }
       cancelEdit();
     }
+    if (cancelRestore && !['Meta', 'Control', 'Alt', 'Shift', 'AltGraph'].includes(event.key)) cancelRestore();
     if (cancelDelete) {
       if (['Meta', 'Control', 'Alt', 'Shift', 'AltGraph'].includes(event.key)) return;
       if (shortcutsAPI.matches(event, shortcuts.delete)) {
@@ -330,6 +427,14 @@
     if (event.defaultPrevented || event.repeat || event.isComposing) return;
     const target = event.target;
     let button;
+    if (undoDeletion && event.key.toLowerCase() === 'z' && event.metaKey !== event.ctrlKey && !event.altKey && !event.shiftKey &&
+        !typing(target) && !typing(document.activeElement) &&
+        ![...document.querySelectorAll('.modal-two, .modal-two-dialog-container, [role="dialog"], [aria-modal="true"]')].some(visible)) {
+      if (!undoDeletion()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (features.delete && shortcutsAPI.matches(event, shortcuts.delete)) {
       const surface = activeSurface(target);
       if (!surface) return;
@@ -342,7 +447,10 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       if (confirm) button.click();
-      else startDelete(surface, button, button === more);
+      else {
+        const restorable = button.matches('[data-testid="event-popover:delete"]') && captureUndo(surface);
+        startDelete(surface, button, button === more, restorable ? offerUndo : undefined);
+      }
       return;
     }
     if (features.save && shortcutsAPI.matches(event, shortcuts.save) && target instanceof HTMLTextAreaElement &&

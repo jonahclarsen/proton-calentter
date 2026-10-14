@@ -9,6 +9,7 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 - Press **E** with an event card open to edit it, including previews opened from search.
 - Press **Enter** in a search-result preview to navigate to the event.
 - Press **Cmd + Shift + R** to delete and confirm from the preview card, compact editor, or full editor.
+- After deleting from a preview card with the shortcut, press **Cmd + Z** or click **Undo** in the "Event deleted" notification to restore it.
 - Enable or disable each feature using the checkboxes at the top of settings. All features start enabled.
 - Change shortcuts from the extension's toolbar popup or extension options. Settings follow your system's light/dark mode; event buttons use Proton's own styling.
 
@@ -20,7 +21,7 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 4. Disable the two original Tampermonkey scripts to avoid duplicate controls.
 5. Refresh Proton Calendar. Pin **Proton Calentter** in Chrome's extensions menu for easy access to settings.
 
-No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.1.4**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
+No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.2.0**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
 
 ## Shortcuts
 
@@ -32,6 +33,8 @@ In the full editor, plain **Enter** also saves from any field except the descrip
 
 The delete shortcut clicks the event's Delete button and confirms the resulting event-deletion prompt, using Proton's currently selected scope (including its default recurring-event choice). From the compact editor, it opens **More options** first because that card has no Delete button. It also works while typing in an event editor with the default modified shortcut. It never searches other cards behind a dialog. New user input, leaving the tab, disabling deletion, or a three-second timeout cancels any pending steps. Delete recognition in editors and confirmations currently requires Proton's English labels. A disabled delete shortcut leaves the key combination to the browser, where Cmd + Shift + R normally reloads the page.
 
+Proton has no event trash, so undo recreates the event through Proton's own **Duplicate** action, captured just before the shortcut deletes it, and saves the copy automatically. The restored event keeps its calendar, time, title, location, description, and notifications, but gets a new identity; video-conference links and, on free plans, event colors are not restored. Undo is offered only after Proton confirms the deletion, only for deletions started from a preview card, and never for recurring events, single occurrences, or events with participants (where a copy could re-send invitations). It stays available while the notification shows and for at least ten seconds. **Cmd + Z** (or **Ctrl + Z**) is ignored while typing or with a dialog open; any input before the copy saves leaves its editor open for you. Undo follows the delete feature toggle and relies on Proton's English "Event deleted" notification and its internal React handlers, so a Proton update may disable it until selectors are updated.
+
 Disabling links or copy buttons removes the extension's additions from already-open cards immediately. Shortcut settings and feature toggles persist locally; resetting shortcuts leaves feature toggles unchanged. Disable any older Karabiner mapping for the same shortcut so the keys reach the extension.
 
 Copy buttons read the current event at click time and preserve description line breaks. Description and combined-copy buttons are disabled when there is no description. Web links open in a new tab. App links using `scheme://` URLs open through the browser’s registered app handler; Chrome may ask you to confirm opening the app. Executable, local-file, and browser-internal URLs are not linked.
@@ -40,7 +43,7 @@ Copy buttons read the current event at click time and preserve description line 
 
 The extension runs only on `https://calendar.proton.me/*`. All processing is local. It makes no network requests, collects no analytics, and stores only your shortcut preferences and feature toggles locally. It accesses displayed event text to add links and copy text when requested.
 
-Permissions: `clipboardWrite` for copying and `storage` for shortcuts. It does not read your clipboard or request account credentials. There is no background service or external runtime dependency. Opening a link navigates to the URL or launches the registered app you clicked as usual.
+Permissions: `clipboardWrite` for copying and `storage` for shortcuts. A small script runs in the page itself (`undo.js`) only to reach Proton's Duplicate action for undo. It does not read your clipboard or request account credentials. There is no background service or external runtime dependency. Opening a link navigates to the URL or launches the registered app you clicked as usual.
 
 ## Development
 
@@ -51,7 +54,7 @@ pnpm check
 pnpm test
 ```
 
-The browser tests load the actual unpacked extension into Chromium and serve synthetic calendar markup locally through request interception. They cover linkification, copying, SPA updates, all three deletion views, confirmation scope and cancellation, feature toggles, keyboard safeguards, settings persistence, and both color schemes. Clipboard calls are stubbed inside the extension's isolated world so tests do not change your clipboard. No Proton login or personal event data is needed.
+The browser tests load the actual unpacked extension into Chromium and serve synthetic calendar markup locally through request interception. They cover linkification, copying, SPA updates, all three deletion views, confirmation scope and cancellation, undo via notification and Cmd + Z with its safeguards, feature toggles, keyboard safeguards, settings persistence, and both color schemes. Clipboard calls are stubbed inside the extension's isolated world so tests do not change your clipboard. No Proton login or personal event data is needed.
 
 The macOS Codex sandbox used for this project blocks Chromium from launching; agents should run browser tests with approved execution outside that sandbox. A launch failure reporting `Target page, context or browser has been closed`, `SIGABRT`, and `kill EPERM` occurs before test assertions run. In unfamiliar environments, `pnpm test --max-failures=1` stops quickly for diagnosis. `pnpm check` works inside the sandbox.
 

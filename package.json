@@ -1,12 +1,12 @@
 {
   "name": "proton-calentter",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.13.1",
   "scripts": {
     "test": "playwright test",
-    "check": "node --check extension/content.js && node --check extension/shortcuts.js && node --check extension/settings.js"
+    "check": "node --check extension/content.js && node --check extension/shortcuts.js && node --check extension/settings.js && node --check extension/undo.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0"

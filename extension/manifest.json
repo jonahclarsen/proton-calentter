@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Proton Calentter",
-  "version": "1.1.4",
-  "description": "Better Proton Calendar: clickable title and description links, copy buttons, and customizable edit/save shortcuts.",
+  "version": "1.2.0",
+  "description": "Better Proton Calendar: clickable title and description links, copy buttons, customizable edit/save/delete shortcuts, and undo for deletions.",
   "permissions": ["clipboardWrite", "storage"],
   "icons": { "16": "icons/calendar-16.png", "32": "icons/calendar-32.png", "48": "icons/calendar-48.png", "128": "icons/calendar-128.png" },
   "action": {
@@ -18,6 +18,11 @@
     "matches": ["https://calendar.proton.me/*"],
     "js": ["shortcuts.js", "content.js"],
     "css": ["content.css"],
+    "run_at": "document_idle"
+  }, {
+    "matches": ["https://calendar.proton.me/*"],
+    "js": ["undo.js"],
+    "world": "MAIN",
     "run_at": "document_idle"
   }]
 }
