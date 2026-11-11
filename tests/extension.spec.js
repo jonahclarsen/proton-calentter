@@ -480,12 +480,12 @@ test('repeated delete shortcut triggers only one action', async ({ calendar: { p
 test('all feature checkboxes apply immediately and persist', async ({ calendar: { page, id }, context }) => {
   const settings = await context.newPage();
   await settings.goto(`chrome-extension://${id}/settings.html`);
-  await expect(settings.getByRole('checkbox')).toHaveCount(6);
+  await expect(settings.getByRole('checkbox')).toHaveCount(7);
   await settings.getByRole('checkbox', { name: 'Clickable links' }).uncheck();
   await expect(page.locator('.eventpopover-title a')).toHaveCount(0);
   await settings.getByRole('checkbox', { name: 'Copy buttons' }).uncheck();
   await expect(page.locator('.pcal-copy-bar')).toHaveCount(0);
-  for (const name of ['Save shortcut', 'Edit shortcut', 'Delete shortcut', 'Navigate shortcut']) {
+  for (const name of ['Recurring buttons', 'Save shortcut', 'Edit shortcut', 'Delete shortcut', 'Navigate shortcut']) {
     await settings.getByRole('checkbox', { name, exact: true }).uncheck();
   }
   await expect(settings.locator('#save')).toBeDisabled();
@@ -831,4 +831,115 @@ test('search edit retries an ignored click until the editor opens, then stops', 
   await page.locator('#event-title-input').evaluate(input => input.closest('form').remove());
   await page.waitForTimeout(700);
   await expect(page.locator('body')).toHaveAttribute('data-edits', '2');
+});
+
+// Mirrors Proton's recurring Prompt: controlled radios re-render asynchronously, like React state.
+async function showRecurringPrompt(page, { kind = 'update', warnOn = '' } = {}) {
+  await page.evaluate(({ kind, warnOn }) => {
+    document.body.dataset.confirms = '0';
+    document.body.dataset.hotkeys = '0';
+    delete document.body.dataset.scope;
+    const labels = ['This event', 'This and future events', 'All events'];
+    let type = labels[0];
+    const container = document.createElement('div');
+    container.className = 'modal-two-dialog-container';
+    container.innerHTML = `<div class="prompt-header"><h1 class="text-lg text-bold">${kind === 'delete' ? 'Delete recurring event' : 'Update recurring event'}</h1></div>
+      <div class="modal-two-content"><div class="mb-4">Which event would you like to ${kind}?</div>
+      ${labels.map((label, i) => `<div class="flex mb-2"><label for="recurringTypeChoice${i}" class="relative flex-nowrap">
+        <input id="recurringTypeChoice${i}" type="radio" class="radio sr-only" name="recurringType"
+          data-testid="${kind === 'delete' ? 'delete-recurring-popover:delete-option-radio' : 'update-recurring-popover:update-option-radio'}">
+        <span class="radio-fakeradio"></span>${label}</label></div>`).join('')}</div>
+      <footer class="modal-two-footer prompt-footer"><div class="flex gap-2">
+        <button type="button" class="button button-medium button-solid-${kind === 'delete' ? 'danger' : 'norm'} w-full">${kind === 'delete' ? 'Delete' : 'Update'}</button>
+        <button type="button" class="button button-medium button-solid-weak w-full">Cancel</button></div></footer>`;
+    const content = container.querySelector('.modal-two-content');
+    const radios = [...container.querySelectorAll('input')];
+    const render = () => {
+      radios.forEach((radio, i) => { radio.checked = labels[i] === type; });
+      content.querySelector('.warning')?.remove();
+      if (type === warnOn) content.insertAdjacentHTML('beforeend', '<div class="warning">Previous edits will be lost.</div>');
+    };
+    radios.forEach((radio, i) => radio.addEventListener('change', () => { type = labels[i]; queueMicrotask(render); }));
+    const confirm = () => {
+      document.body.dataset.confirms = String(Number(document.body.dataset.confirms) + 1);
+      document.body.dataset.scope = type;
+      container.remove();
+    };
+    container.querySelector('.modal-two-footer button').onclick = confirm;
+    // Proton's Prompt hotkeys: Enter confirms the current scope.
+    container.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      document.body.dataset.hotkeys = String(Number(document.body.dataset.hotkeys) + 1);
+      confirm();
+    });
+    render();
+    document.body.append(container);
+  }, { kind, warnOn });
+}
+
+for (const kind of ['update', 'delete']) {
+  test(`recurring ${kind} prompt confirms the clicked scope in one click`, async ({ calendar: { page } }) => {
+    await showRecurringPrompt(page, { kind });
+    const list = page.locator('.pcal-scope-list button');
+    await expect(list).toHaveText(['This event', 'This and future events', 'All events']);
+    await expect(page.locator('input[type="radio"]').first()).toBeHidden();
+    await expect(page.getByRole('button', { name: kind === 'delete' ? 'Delete' : 'Update' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    await expect(list.nth(1)).toHaveClass(new RegExp(`button-outline-${kind === 'delete' ? 'danger' : 'norm'}`));
+    await list.nth(1).click();
+    await expect(page.locator('body')).toHaveAttribute('data-confirms', '1');
+    await expect(page.locator('body')).toHaveAttribute('data-scope', 'This and future events');
+  });
+}
+
+test('a scope that reveals a warning needs a second click', async ({ calendar: { page } }) => {
+  await showRecurringPrompt(page, { warnOn: 'All events' });
+  const all = page.getByRole('button', { name: 'All events' });
+  await all.click();
+  await expect(page.locator('.warning')).toBeVisible();
+  await expect(all).toHaveClass(/button-solid-norm/);
+  await expect(page.locator('body')).toHaveAttribute('data-confirms', '0');
+  await all.click();
+  await expect(page.locator('body')).toHaveAttribute('data-confirms', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-scope', 'All events');
+});
+
+test('Enter on a scope button confirms that scope, not the prompt default', async ({ calendar: { page } }) => {
+  await showRecurringPrompt(page);
+  await page.getByRole('button', { name: 'All events' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-confirms', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-scope', 'All events');
+  await expect(page.locator('body')).toHaveAttribute('data-hotkeys', '0');
+});
+
+test('delete shortcut confirms the default scope through the scope buttons', async ({ calendar: { page } }) => {
+  await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.testid = 'event-popover:delete';
+    button.textContent = 'Delete';
+    button.onclick = () => document.body.dispatchEvent(new CustomEvent('show-prompt'));
+    document.querySelector('.eventpopover-header').append(button);
+    document.querySelector('.eventpopover').focus();
+  });
+  await page.evaluate(() => new Promise(resolve => setTimeout(resolve)));
+  const shown = page.evaluate(() => new Promise(resolve => document.body.addEventListener('show-prompt', resolve, { once: true })));
+  await page.keyboard.press('Meta+Shift+r');
+  await shown;
+  await showRecurringPrompt(page, { kind: 'delete' });
+  await expect(page.locator('body')).toHaveAttribute('data-confirms', '1');
+  await expect(page.locator('body')).toHaveAttribute('data-scope', 'This event');
+});
+
+test('recurring buttons follow their feature toggle', async ({ calendar: { page, evaluate } }) => {
+  await showRecurringPrompt(page);
+  await expect(page.locator('.pcal-scope-list')).toBeVisible();
+  await evaluate('chrome.storage.local.set({ features: { recurring: false } })');
+  await expect(page.locator('.pcal-scope-list')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Update' })).toBeVisible();
+  await expect(page.locator('label', { hasText: 'All events' })).toBeVisible();
+  await evaluate('chrome.storage.local.set({ features: { recurring: true } })');
+  await expect(page.locator('.pcal-scope-list')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Update' })).toBeHidden();
 });

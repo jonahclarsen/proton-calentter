@@ -21,3 +21,10 @@
 @media (prefers-color-scheme: dark) {
   .eventpopover a[data-pcal-link] { color: var(--link-norm, #a78bfa); }
 }
+.pcal-scope-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-block-end: 1rem;
+}
+[data-pcal-hidden] { display: none !important; }

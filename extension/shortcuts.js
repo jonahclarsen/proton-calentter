@@ -31,7 +31,7 @@
         shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key].filter(Boolean).join(' + ');
   }
   function normalizeFeatures(value) {
-    return Object.fromEntries(['links', 'copy', ...Object.keys(defaults)].map(key => [key, value?.[key] !== false]));
+    return Object.fromEntries(['links', 'copy', 'recurring', ...Object.keys(defaults)].map(key => [key, value?.[key] !== false]));
   }
   globalThis.ProtonCalentterShortcuts = { defaults, normalize, normalizeFeatures, fromEvent, matches, label, valid };
 })();

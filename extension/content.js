@@ -8,6 +8,7 @@
     shortcuts = shortcutsAPI.normalize(result.shortcuts);
     features = shortcutsAPI.normalizeFeatures(result.features);
     document.querySelectorAll('.eventpopover').forEach(enhance);
+    document.querySelectorAll(recurringRadio).forEach(radio => enhancePrompt(promptOf(radio)));
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.shortcuts) shortcuts = shortcutsAPI.normalize(changes.shortcuts.newValue);
@@ -16,6 +17,7 @@
       if (!features.delete) { cancelDelete?.(); clearUndo?.(); cancelRestore?.(); forgetUndo(); }
       if (!features.edit) cancelEdit?.();
       document.querySelectorAll('.eventpopover').forEach(enhance);
+      document.querySelectorAll(recurringRadio).forEach(radio => enhancePrompt(promptOf(radio)));
     }
   });
 
@@ -168,7 +170,104 @@
     }
   }
 
+  // Proton's recurring update/delete prompts: one button per scope instead of radios plus Update/Delete.
+  const recurringRadio = 'input[type="radio"][data-testid="update-recurring-popover:update-option-radio"], ' +
+    'input[type="radio"][data-testid="delete-recurring-popover:delete-option-radio"]';
+  function promptOf(radio) {
+    return radio.closest('.modal-two-dialog-container, [role="dialog"], dialog');
+  }
+  function promptConfirm(prompt) {
+    return prompt?.querySelector('.modal-two-footer button, .prompt-footer button');
+  }
+  function promptTexts(prompt) {
+    const walker = document.createTreeWalker(prompt, NodeFilter.SHOW_TEXT, {
+      acceptNode: node => node.parentElement.closest('.pcal-scope-list') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+    });
+    const texts = [];
+    while (walker.nextNode()) if (walker.currentNode.textContent.trim()) texts.push(walker.currentNode.textContent.trim());
+    return texts;
+  }
+  function scopeClass(confirm, chosen) {
+    const base = confirm.className.split(/\s+/).filter(name => /^button(-|$)/.test(name)).join(' ') || 'button button-solid-norm';
+    return `${chosen ? base : base.replace(/button-solid-/g, 'button-outline-')} w-full pcal-scope-button`;
+  }
+  function restorePrompt(prompt) {
+    prompt.querySelector('.pcal-scope-list')?.remove();
+    prompt.querySelectorAll('[data-pcal-hidden]').forEach(element => element.removeAttribute('data-pcal-hidden'));
+  }
+  async function chooseScope(prompt, radio, button) {
+    if (button.disabled) return;
+    const before = new Set(promptTexts(prompt));
+    const list = button.parentElement;
+    list.querySelectorAll('button').forEach(item => { item.disabled = true; });
+    try {
+      if (!radio.checked) radio.click();
+      // Let Proton re-render with the new scope before confirming.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const confirm = promptConfirm(prompt);
+      if (!features.recurring || !radio.isConnected || !radio.checked || !confirm?.isConnected || confirm.disabled) return;
+      // A newly shown warning (e.g. losing earlier single edits) must be seen; the next click confirms.
+      if (promptTexts(prompt).some(text => !before.has(text))) {
+        list.querySelectorAll('button').forEach(item => { item.className = scopeClass(confirm, item === button); });
+        return;
+      }
+      confirm.click();
+    } finally {
+      list.querySelectorAll('button').forEach(item => { item.disabled = false; });
+    }
+  }
+  function enhancePrompt(prompt) {
+    if (!prompt?.isConnected) return;
+    if (!features.recurring) return restorePrompt(prompt);
+    const radios = [...prompt.querySelectorAll(recurringRadio)];
+    const confirm = promptConfirm(prompt);
+    if (radios.length < 2 || !confirm || radios.some(radio => !radio.labels?.[0]?.textContent.trim())) return restorePrompt(prompt);
+    // Hide the outermost element holding each radio alone.
+    const rows = radios.map(radio => {
+      let row = radio;
+      while (row.parentElement && row.parentElement !== prompt &&
+        row.parentElement.querySelectorAll(recurringRadio).length === 1) row = row.parentElement;
+      return row;
+    });
+    let list = prompt.querySelector('.pcal-scope-list');
+    const labels = radios.map(radio => radio.labels[0].textContent.trim());
+    if (!list || list.nextElementSibling !== rows[0] ||
+        [...list.children].map(button => button.textContent).join('\n') !== labels.join('\n')) {
+      list?.remove();
+      list = document.createElement('div');
+      list.className = 'pcal-scope-list';
+      // Keep Proton's Enter/Space prompt hotkeys from confirming a different scope.
+      list.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+      });
+      radios.forEach((radio, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = scopeClass(confirm, false);
+        button.textContent = labels[index];
+        button.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          void chooseScope(prompt, radio, button);
+        });
+        list.append(button);
+      });
+      rows[0].before(list);
+    }
+    for (const element of [...rows, confirm]) {
+      if (!element.hasAttribute('data-pcal-hidden')) element.setAttribute('data-pcal-hidden', '');
+    }
+  }
+  // The scope button for Proton's currently selected scope, used by the delete shortcut.
+  function selectedScope(surface) {
+    const list = surface.querySelector('.pcal-scope-list');
+    if (!list) return null;
+    const index = [...surface.querySelectorAll(recurringRadio)].findIndex(radio => radio.checked);
+    return list.children[index] || null;
+  }
+
   const pending = new Set();
+  const pendingPrompts = new Set();
   let frame;
   function collect(node) {
     const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
@@ -176,6 +275,8 @@
     const popover = element.closest('.eventpopover');
     if (popover) pending.add(popover);
     element.querySelectorAll('.eventpopover').forEach(item => pending.add(item));
+    if (element.matches(recurringRadio)) pendingPrompts.add(promptOf(element));
+    element.querySelectorAll(recurringRadio).forEach(radio => pendingPrompts.add(promptOf(radio)));
   }
   new MutationObserver(mutations => {
     for (const mutation of mutations) {
@@ -184,6 +285,12 @@
       const popover = element?.closest('.eventpopover');
       if (popover) pending.add(popover);
       mutation.addedNodes.forEach(collect);
+    }
+    // Prompts are adjusted right away so their original buttons never flash.
+    if (pendingPrompts.size) {
+      const prompts = [...pendingPrompts];
+      pendingPrompts.clear();
+      prompts.forEach(enhancePrompt);
     }
     if (!frame && pending.size) frame = requestAnimationFrame(() => {
       frame = 0;
@@ -223,7 +330,7 @@
     if (!surface || surface.querySelector('#event-title-input')) return null;
     const heading = surface.querySelector('.modal-two-title, h1, h2')?.textContent.trim();
     if (!['Delete event', 'Delete recurring event'].includes(heading)) return null;
-    return [...surface.querySelectorAll('button')].find(button => button.textContent.trim() === 'Delete');
+    return selectedScope(surface) || [...surface.querySelectorAll('button')].find(button => button.textContent.trim() === 'Delete');
   }
   let cancelDelete;
   function startDelete(surface, first, moreOptions, onConfirm, onAbort) {
