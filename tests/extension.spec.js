@@ -892,14 +892,9 @@ for (const kind of ['update', 'delete']) {
   });
 }
 
-test('a scope that reveals a warning needs a second click', async ({ calendar: { page } }) => {
+test('a scope that reveals a warning still confirms in one click', async ({ calendar: { page } }) => {
   await showRecurringPrompt(page, { warnOn: 'All events' });
-  const all = page.getByRole('button', { name: 'All events' });
-  await all.click();
-  await expect(page.locator('.warning')).toBeVisible();
-  await expect(all).toHaveClass(/button-solid-norm/);
-  await expect(page.locator('body')).toHaveAttribute('data-confirms', '0');
-  await all.click();
+  await page.getByRole('button', { name: 'All events' }).click();
   await expect(page.locator('body')).toHaveAttribute('data-confirms', '1');
   await expect(page.locator('body')).toHaveAttribute('data-scope', 'All events');
 });

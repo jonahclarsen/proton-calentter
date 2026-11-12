@@ -179,17 +179,9 @@
   function promptConfirm(prompt) {
     return prompt?.querySelector('.modal-two-footer button, .prompt-footer button');
   }
-  function promptTexts(prompt) {
-    const walker = document.createTreeWalker(prompt, NodeFilter.SHOW_TEXT, {
-      acceptNode: node => node.parentElement.closest('.pcal-scope-list') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
-    });
-    const texts = [];
-    while (walker.nextNode()) if (walker.currentNode.textContent.trim()) texts.push(walker.currentNode.textContent.trim());
-    return texts;
-  }
-  function scopeClass(confirm, chosen) {
+  function scopeClass(confirm) {
     const base = confirm.className.split(/\s+/).filter(name => /^button(-|$)/.test(name)).join(' ') || 'button button-solid-norm';
-    return `${chosen ? base : base.replace(/button-solid-/g, 'button-outline-')} w-full pcal-scope-button`;
+    return `${base.replace(/button-solid-/g, 'button-outline-')} w-full pcal-scope-button`;
   }
   function restorePrompt(prompt) {
     prompt.querySelector('.pcal-scope-list')?.remove();
@@ -197,7 +189,6 @@
   }
   async function chooseScope(prompt, radio, button) {
     if (button.disabled) return;
-    const before = new Set(promptTexts(prompt));
     const list = button.parentElement;
     list.querySelectorAll('button').forEach(item => { item.disabled = true; });
     try {
@@ -206,11 +197,6 @@
       await new Promise(resolve => setTimeout(resolve, 50));
       const confirm = promptConfirm(prompt);
       if (!features.recurring || !radio.isConnected || !radio.checked || !confirm?.isConnected || confirm.disabled) return;
-      // A newly shown warning (e.g. losing earlier single edits) must be seen; the next click confirms.
-      if (promptTexts(prompt).some(text => !before.has(text))) {
-        list.querySelectorAll('button').forEach(item => { item.className = scopeClass(confirm, item === button); });
-        return;
-      }
       confirm.click();
     } finally {
       list.querySelectorAll('button').forEach(item => { item.disabled = false; });
@@ -243,7 +229,7 @@
       radios.forEach((radio, index) => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = scopeClass(confirm, false);
+        button.className = scopeClass(confirm);
         button.textContent = labels[index];
         button.addEventListener('click', event => {
           event.preventDefault();

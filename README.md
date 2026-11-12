@@ -38,7 +38,7 @@ Proton has no event trash, so undo recreates the event through Proton's own **Du
 
 ## Recurring events
 
-Proton's "Update recurring event" and "Delete recurring event" prompts show a button for each scope instead of radio buttons and an Update or Delete button. Clicking one selects that scope in Proton's own form and confirms it. If the choice reveals a new Proton warning, such as earlier single-occurrence edits being lost, the prompt stays open with that button highlighted; click it again to confirm. Enter or Space on a focused scope button confirms that scope. Cancel and Esc work as before. The delete shortcut confirms Proton's default scope through the matching button. Turning off **Recurring buttons** restores Proton's original prompt, including any prompt already open.
+Proton's "Update recurring event" and "Delete recurring event" prompts show a button for each scope instead of radio buttons and an Update or Delete button. Clicking one selects that scope in Proton's own form and confirms it. Enter or Space on a focused scope button confirms that scope. Cancel and Esc work as before. The delete shortcut confirms Proton's default scope through the matching button. Turning off **Recurring buttons** restores Proton's original prompt, including any prompt already open.
 
 Disabling links or copy buttons removes the extension's additions from already-open cards immediately. Shortcut settings and feature toggles persist locally; resetting shortcuts leaves feature toggles unchanged. Disable any older Karabiner mapping for the same shortcut so the keys reach the extension.
 
@@ -59,7 +59,7 @@ pnpm check
 pnpm test
 ```
 
-The browser tests load the actual unpacked extension into Chromium and serve synthetic calendar markup locally through request interception. They cover linkification, copying, SPA updates, all three deletion views, confirmation scope and cancellation, recurring scope buttons and their warning safeguard, undo via notification and Cmd + Z with its safeguards, feature toggles, keyboard safeguards, settings persistence, and both color schemes. Clipboard calls are stubbed inside the extension's isolated world so tests do not change your clipboard. No Proton login or personal event data is needed.
+The browser tests load the actual unpacked extension into Chromium and serve synthetic calendar markup locally through request interception. They cover linkification, copying, SPA updates, all three deletion views, confirmation scope and cancellation, one-click recurring scope buttons, undo via notification and Cmd + Z with its safeguards, feature toggles, keyboard safeguards, settings persistence, and both color schemes. Clipboard calls are stubbed inside the extension's isolated world so tests do not change your clipboard. No Proton login or personal event data is needed.
 
 The macOS Codex sandbox used for this project blocks Chromium from launching; agents should run browser tests with approved execution outside that sandbox. A launch failure reporting `Target page, context or browser has been closed`, `SIGABRT`, and `kill EPERM` occurs before test assertions run. In unfamiliar environments, `pnpm test --max-failures=1` stops quickly for diagnosis. `pnpm check` works inside the sandbox.
 
