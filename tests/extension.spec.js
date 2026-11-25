@@ -332,7 +332,8 @@ test('shortcut capture cancels and prevents duplicate bindings', async ({ calend
 
 test('settings follow light/dark mode without overflowing', async ({ calendar: { id }, context }, testInfo) => {
   const settings = await context.newPage();
-  await settings.setViewportSize({ width: 342, height: 480 });
+  // Chrome sizes the popup to its content, up to 600px tall.
+  await settings.setViewportSize({ width: 342, height: 560 });
   await settings.goto(`chrome-extension://${id}/settings.html`);
   await expect(settings.locator('#save')).toHaveText('Cmd + Enter');
   for (const mode of ['light', 'dark']) {
@@ -480,12 +481,12 @@ test('repeated delete shortcut triggers only one action', async ({ calendar: { p
 test('all feature checkboxes apply immediately and persist', async ({ calendar: { page, id }, context }) => {
   const settings = await context.newPage();
   await settings.goto(`chrome-extension://${id}/settings.html`);
-  await expect(settings.getByRole('checkbox')).toHaveCount(7);
+  await expect(settings.getByRole('checkbox')).toHaveCount(8);
   await settings.getByRole('checkbox', { name: 'Clickable links' }).uncheck();
   await expect(page.locator('.eventpopover-title a')).toHaveCount(0);
   await settings.getByRole('checkbox', { name: 'Copy buttons' }).uncheck();
   await expect(page.locator('.pcal-copy-bar')).toHaveCount(0);
-  for (const name of ['Recurring buttons', 'Save shortcut', 'Edit shortcut', 'Delete shortcut', 'Navigate shortcut']) {
+  for (const name of ['Recurring buttons', 'Save shortcut', 'Edit shortcut', 'Delete shortcut', 'Navigate shortcut', 'Return shortcut']) {
     await settings.getByRole('checkbox', { name, exact: true }).uncheck();
   }
   await expect(settings.locator('#save')).toBeDisabled();
@@ -937,4 +938,80 @@ test('recurring buttons follow their feature toggle', async ({ calendar: { page,
   await evaluate('chrome.storage.local.set({ features: { recurring: true } })');
   await expect(page.locator('.pcal-scope-list')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Update' })).toBeHidden();
+});
+
+// A save that moves the event makes Proton navigate to its new date.
+async function moveOnSave(page, mode = 'pushed') {
+  await page.evaluate(mode => {
+    history.pushState(null, '', '/u/14/week/2026/11/14/6');
+    document.body.dataset.pops = '0';
+    window.addEventListener('popstate', () => { document.body.dataset.pops = String(Number(document.body.dataset.pops) + 1); });
+    document.addEventListener('submit', event => {
+      event.target.remove();
+      setTimeout(() => history[mode === 'pushed' ? 'pushState' : 'replaceState'](null, '', '/u/14/week/2026/12/3'), 200);
+    });
+    document.body.append(document.querySelector('#editor').content.cloneNode(true));
+  }, mode);
+  await page.getByTestId('create-event-modal:save').click();
+  await expect(page).toHaveURL(/\/week\/2026\/12\/3$/);
+}
+
+for (const mode of ['pushed', 'replaced']) {
+  test(`D returns to the exact view a save ${mode} away from, once`, async ({ calendar: { page } }) => {
+    await moveOnSave(page, mode);
+    await page.keyboard.press('d');
+    await expect(page).toHaveURL(/\/u\/14\/week\/2026\/11\/14\/6$/);
+    await expect(page.locator('body')).toHaveAttribute('data-pops', '1');
+    await page.keyboard.press('d');
+    await page.waitForTimeout(100);
+    await expect(page).toHaveURL(/\/week\/2026\/11\/14\/6$/);
+    await expect(page.locator('body')).toHaveAttribute('data-pops', '1');
+  });
+}
+
+test('D ignores navigation without a save, typing, dialogs and later navigation', async ({ calendar: { page } }) => {
+  await page.evaluate(() => {
+    history.pushState(null, '', '/u/14/week/2026/11/14');
+    history.pushState(null, '', '/u/14/week/2026/11/21');
+  });
+  await page.keyboard.press('d');
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/11\/21$/);
+  await moveOnSave(page);
+  await page.locator('#search').focus();
+  await page.keyboard.press('d');
+  await expect(page.locator('#search')).toHaveValue('d');
+  await page.locator('#search').blur();
+  await page.evaluate(() => {
+    const prompt = document.createElement('div');
+    prompt.setAttribute('role', 'dialog');
+    prompt.textContent = 'Prompt';
+    document.body.append(prompt);
+  });
+  await page.keyboard.press('d');
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/12\/3$/);
+  await page.evaluate(() => {
+    document.querySelector('[role="dialog"]').remove();
+    history.pushState(null, '', '/u/14/month/2026/12/3');
+  });
+  await page.keyboard.press('d');
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/month\/2026\/12\/3$/);
+});
+
+test('return shortcut follows its feature toggle and can be rebound', async ({ calendar: { page, evaluate } }) => {
+  await evaluate('chrome.storage.local.set({ features: { back: false } })');
+  await moveOnSave(page);
+  await page.keyboard.press('d');
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/12\/3$/);
+  await evaluate(`chrome.storage.local.set({ features: { back: true }, shortcuts: {
+    back: { key: 'b', meta: false, ctrl: false, alt: true, shift: false }
+  } })`);
+  await page.keyboard.press('d');
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/12\/3$/);
+  await page.keyboard.press('Alt+b');
+  await expect(page).toHaveURL(/\/11\/14\/6$/);
 });

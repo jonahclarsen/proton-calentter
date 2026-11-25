@@ -5,7 +5,8 @@
     save: { key: 'Enter', meta: true, ctrl: false, alt: false, shift: false },
     navigate: { key: 'Enter', meta: false, ctrl: false, alt: false, shift: false },
     edit: { key: 'e', meta: false, ctrl: false, alt: false, shift: false },
-    delete: { key: 'r', meta: true, ctrl: false, alt: false, shift: true }
+    delete: { key: 'r', meta: true, ctrl: false, alt: false, shift: true },
+    back: { key: 'd', meta: false, ctrl: false, alt: false, shift: false }
   };
   const modifierKeys = new Set(['Meta', 'Control', 'Alt', 'Shift', 'AltGraph', 'CapsLock', 'Unidentified', 'Dead']);
   function valid(value) {

@@ -511,6 +511,58 @@
     navigate.click();
     advance();
   }
+  // Remember the view a save navigated away from, so the return shortcut can go back to it.
+  let armedUntil = 0;
+  let arms = 0;
+  let returnTo = null;
+  let lastURL = location.href;
+  function arm() {
+    arms++;
+    armedUntil = performance.now() + 10000;
+  }
+  document.addEventListener('click', event => {
+    const button = event.target instanceof Element && event.target.closest('button');
+    if (button && (button.matches('[data-testid="create-event-modal:save"], [data-testid="create-event-popover:save"]') ||
+        promptOf(button)?.querySelector(recurringRadio))) arm();
+  }, true);
+  document.addEventListener('submit', event => {
+    if (event.target instanceof Element && event.target.querySelector('#event-title-input')) arm();
+  }, true);
+  function urlChanged() {
+    const url = location.href;
+    if (url === lastURL) return;
+    const from = lastURL;
+    lastURL = url;
+    if (new URL(from).pathname === new URL(url).pathname) return;
+    // Several URL updates after one save count as one move; any other navigation forgets the old view.
+    if (performance.now() < armedUntil) {
+      if (returnTo?.arm !== arms) {
+        returnTo = { url: from, arm: arms };
+        // Absorb only Proton's immediate follow-up URL updates.
+        armedUntil = Math.min(armedUntil, performance.now() + 1000);
+      }
+    } else returnTo = null;
+  }
+  function settle() {
+    if (returnTo?.arm === arms) armedUntil = 0;
+  }
+  document.addEventListener('pointerdown', settle, true);
+  document.addEventListener('keydown', settle, true);
+  globalThis.navigation?.addEventListener('currententrychange', urlChanged);
+  window.addEventListener('popstate', urlChanged);
+  function goBack() {
+    const { url } = returnTo;
+    returnTo = null;
+    armedUntil = 0;
+    try {
+      const entries = navigation.entries();
+      const index = navigation.currentEntry.index;
+      if (index > 0 && entries[index - 1]?.url === url) return history.back();
+    } catch { /* Fall back to pushing the old URL. */ }
+    // Proton's router follows popstate, so this switches views without reloading.
+    history.pushState(null, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+  }
   // Wait for saved preferences before allowing shortcuts.
   settingsReady.then(() => document.addEventListener('keydown', event => {
     if (cancelEdit) {
@@ -535,6 +587,14 @@
       if (!undoDeletion()) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      return;
+    }
+    if (returnTo && features.back && shortcutsAPI.matches(event, shortcuts.back) && returnTo.url !== location.href &&
+        !typing(target) && !typing(document.activeElement) &&
+        ![...document.querySelectorAll('.modal-two, .modal-two-dialog-container, [role="dialog"], [aria-modal="true"]')].some(visible)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      goBack();
       return;
     }
     if (features.delete && shortcutsAPI.matches(event, shortcuts.delete)) {
