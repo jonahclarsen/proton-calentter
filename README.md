@@ -24,7 +24,7 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 4. Disable the two original Tampermonkey scripts to avoid duplicate controls.
 5. Refresh Proton Calendar. Pin **Proton Calentter** in Chrome's extensions menu for easy access to settings.
 
-No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.5.0**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
+No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.5.1**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
 
 ## Shortcuts
 
@@ -44,7 +44,7 @@ When saving an event (including confirming a recurring scope) makes Proton navig
 
 ## Day shift
 
-In week view, **Shift + ←** and **Shift + →** move the URL's start date back or forward by one day (for example `/week/2026/11/22/6` becomes `/week/2026/11/23/6`) without reloading, so the week can start on any day. Holding the keys keeps moving. They are ignored while typing, with a dialog open, or outside week view, and follow the **Day shortcuts** toggle.
+In week view, **Shift + ←** and **Shift + →** move the shown week back or forward by one day without reloading (for example `/week/2026/11/22/6` becomes `/week/2026/11/23/6`). This also works from the default view (`/u/14/`) and from plain week URLs, which Proton always snaps to the start of the week: the extension reads the shown first day from the week header and writes Proton's day-range URL instead. Custom ranges keep their length. Holding the keys keeps moving. They are ignored while typing, with a dialog open, or outside week view, and follow the **Day shortcuts** toggle.
 
 ## Recurring events
 

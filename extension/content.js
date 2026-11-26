@@ -563,14 +563,29 @@
     history.pushState(null, '', url);
     window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
   }
-  // Proton's week URLs (/week/YYYY/M/D[/...]) may start on any day; move that start by one day.
+  // Proton's URL is [/u/N][/view[/YYYY/M/D[/range]]]. Without a range, week view snaps to the week's start,
+  // so always write one: the shown start date plus or minus a day, with the shown number of extra days.
   function shiftDay(days) {
-    const match = location.pathname.match(/^(.*\/week\/)(\d{4})\/(\d{1,2})\/(\d{1,2})(\/.*)?$/);
-    if (!match) return false;
-    const [, prefix, year, month, day, rest = ''] = match;
-    const date = new Date(Date.UTC(+year, month - 1, +day + days));
-    const pad = /^0/.test(month) || /^0/.test(day) ? n => String(n).padStart(2, '0') : String;
-    history.pushState(null, '', `${prefix}${date.getUTCFullYear()}/${pad(date.getUTCMonth() + 1)}/${pad(date.getUTCDate())}${rest}${location.search}${location.hash}`);
+    const match = location.pathname.match(/^((?:\/u\/\d+)?)(?:\/([a-z]+)(?:\/(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\/(\d+))?)?)?\/?$/);
+    if (!match || (match[2] && match[2] !== 'week')) return false;
+    const [, base, , year, month, day, range] = match;
+    const header = document.querySelector('[data-testid="calendar-day-week-view:week-header"]');
+    const numbers = [...(header?.querySelectorAll('.calendar-grid-heading-number') || [])].filter(visible);
+    // The default view (no view in the URL) may not be week view.
+    if (!match[2] && numbers.length < 3) return false;
+    const now = new Date();
+    let start = year ? new Date(Date.UTC(+year, month - 1, +day)) : new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    if (!+range) {
+      // The shown week contains the URL's date (or today); find its first day by the header's day number.
+      const first = Number(numbers[0]?.textContent);
+      for (let back = 0; back < 7 && first; back++) {
+        const candidate = new Date(+start - back * 86400000);
+        if (candidate.getUTCDate() === first) { start = candidate; break; }
+      }
+    }
+    start = new Date(+start + days * 86400000);
+    const extra = +range || (numbers.length > 1 ? numbers.length - 1 : 6);
+    history.pushState(null, '', `${base}/week/${start.getUTCFullYear()}/${start.getUTCMonth() + 1}/${start.getUTCDate()}/${Math.min(extra, 6)}${location.search}${location.hash}`);
     window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
     return true;
   }

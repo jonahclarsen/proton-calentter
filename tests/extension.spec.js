@@ -1016,6 +1016,21 @@ test('return shortcut follows its feature toggle and can be rebound', async ({ c
   await expect(page).toHaveURL(/\/11\/14\/6$/);
 });
 
+// Synthetic week header like Proton's, showing seven days starting on the given day of the month.
+async function showWeek(page, first) {
+  await page.evaluate(first => {
+    document.querySelector('[data-testid="calendar-day-week-view:week-header"]')?.remove();
+    const header = document.createElement('div');
+    header.dataset.testid = 'calendar-day-week-view:week-header';
+    for (let i = 0; i < 7; i++) {
+      const button = document.createElement('button');
+      button.innerHTML = `<span class="calendar-grid-heading-number">${new Date(Date.UTC(2026, 10, first + i)).getUTCDate()}</span>`;
+      header.append(button);
+    }
+    document.body.append(header);
+  }, first);
+}
+
 test('Shift + arrows move the week view by one day', async ({ calendar: { page, evaluate } }) => {
   await page.evaluate(() => {
     history.pushState(null, '', '/u/14/week/2026/11/22/6');
@@ -1025,23 +1040,43 @@ test('Shift + arrows move the week view by one day', async ({ calendar: { page, 
   await page.keyboard.press('Shift+ArrowRight');
   await expect(page).toHaveURL(/\/u\/14\/week\/2026\/11\/23\/6$/);
   await expect(page.locator('body')).toHaveAttribute('data-pops', '1');
-  await page.evaluate(() => history.pushState(null, '', '/u/14/week/2026/12/31'));
+  await page.evaluate(() => history.pushState(null, '', '/u/14/week/2026/12/31/3'));
   await page.keyboard.press('Shift+ArrowRight');
-  await expect(page).toHaveURL(/\/week\/2027\/1\/1$/);
+  await expect(page).toHaveURL(/\/week\/2027\/1\/1\/3$/);
   await page.keyboard.press('Shift+ArrowLeft');
   await page.keyboard.press('Shift+ArrowLeft');
-  await expect(page).toHaveURL(/\/week\/2026\/12\/30$/);
+  await expect(page).toHaveURL(/\/week\/2026\/12\/30\/3$/);
+  // Without a range, Proton shows the whole week containing the date.
+  await showWeek(page, 22);
+  await page.evaluate(() => history.pushState(null, '', '/u/14/week/2026/11/25'));
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page).toHaveURL(/\/u\/14\/week\/2026\/11\/21\/6$/);
+  // The default view shows today's week.
+  await page.clock.setFixedTime(new Date(2026, 10, 25, 12));
+  await page.evaluate(() => history.pushState(null, '', '/u/14/'));
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(page).toHaveURL(/\/u\/14\/week\/2026\/11\/23\/6$/);
   await page.locator('#search').focus();
   await page.keyboard.press('Shift+ArrowLeft');
-  await expect(page).toHaveURL(/\/week\/2026\/12\/30$/);
+  await expect(page).toHaveURL(/\/11\/23\/6$/);
   await page.locator('#search').blur();
-  await page.evaluate(() => history.pushState(null, '', '/u/14/month/2026/12/30'));
+  for (const url of ['/u/14/month/2026/12/30', '/u/14/day/2026/12/30']) {
+    await page.evaluate(url => history.pushState(null, '', url), url);
+    await page.keyboard.press('Shift+ArrowLeft');
+    await page.waitForTimeout(100);
+    await expect(page).toHaveURL(new RegExp(`${url}$`));
+  }
+  // A default view without a week header (such as month) is left alone.
+  await page.evaluate(() => {
+    document.querySelector('[data-testid="calendar-day-week-view:week-header"]').remove();
+    history.pushState(null, '', '/u/14/');
+  });
   await page.keyboard.press('Shift+ArrowLeft');
   await page.waitForTimeout(100);
-  await expect(page).toHaveURL(/\/month\/2026\/12\/30$/);
+  await expect(page).toHaveURL(/\/u\/14\/$/);
   await evaluate('chrome.storage.local.set({ features: { day: false } })');
-  await page.evaluate(() => history.pushState(null, '', '/u/14/week/2026/12/30'));
+  await page.evaluate(() => history.pushState(null, '', '/u/14/week/2026/12/30/6'));
   await page.keyboard.press('Shift+ArrowLeft');
   await page.waitForTimeout(100);
-  await expect(page).toHaveURL(/\/week\/2026\/12\/30$/);
+  await expect(page).toHaveURL(/\/week\/2026\/12\/30\/6$/);
 });
