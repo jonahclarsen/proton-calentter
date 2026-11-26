@@ -481,12 +481,12 @@ test('repeated delete shortcut triggers only one action', async ({ calendar: { p
 test('all feature checkboxes apply immediately and persist', async ({ calendar: { page, id }, context }) => {
   const settings = await context.newPage();
   await settings.goto(`chrome-extension://${id}/settings.html`);
-  await expect(settings.getByRole('checkbox')).toHaveCount(8);
+  await expect(settings.getByRole('checkbox')).toHaveCount(9);
   await settings.getByRole('checkbox', { name: 'Clickable links' }).uncheck();
   await expect(page.locator('.eventpopover-title a')).toHaveCount(0);
   await settings.getByRole('checkbox', { name: 'Copy buttons' }).uncheck();
   await expect(page.locator('.pcal-copy-bar')).toHaveCount(0);
-  for (const name of ['Recurring buttons', 'Save shortcut', 'Edit shortcut', 'Delete shortcut', 'Navigate shortcut', 'Return shortcut']) {
+  for (const name of ['Recurring buttons', 'Save shortcut', 'Edit shortcut', 'Delete shortcut', 'Navigate shortcut', 'Return shortcut', 'Day shortcuts']) {
     await settings.getByRole('checkbox', { name, exact: true }).uncheck();
   }
   await expect(settings.locator('#save')).toBeDisabled();
@@ -1014,4 +1014,34 @@ test('return shortcut follows its feature toggle and can be rebound', async ({ c
   await expect(page).toHaveURL(/\/12\/3$/);
   await page.keyboard.press('Alt+b');
   await expect(page).toHaveURL(/\/11\/14\/6$/);
+});
+
+test('Shift + arrows move the week view by one day', async ({ calendar: { page, evaluate } }) => {
+  await page.evaluate(() => {
+    history.pushState(null, '', '/u/14/week/2026/11/22/6');
+    document.body.dataset.pops = '0';
+    window.addEventListener('popstate', () => { document.body.dataset.pops = String(Number(document.body.dataset.pops) + 1); });
+  });
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(page).toHaveURL(/\/u\/14\/week\/2026\/11\/23\/6$/);
+  await expect(page.locator('body')).toHaveAttribute('data-pops', '1');
+  await page.evaluate(() => history.pushState(null, '', '/u/14/week/2026/12/31'));
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(page).toHaveURL(/\/week\/2027\/1\/1$/);
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page).toHaveURL(/\/week\/2026\/12\/30$/);
+  await page.locator('#search').focus();
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page).toHaveURL(/\/week\/2026\/12\/30$/);
+  await page.locator('#search').blur();
+  await page.evaluate(() => history.pushState(null, '', '/u/14/month/2026/12/30'));
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/month\/2026\/12\/30$/);
+  await evaluate('chrome.storage.local.set({ features: { day: false } })');
+  await page.evaluate(() => history.pushState(null, '', '/u/14/week/2026/12/30'));
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/week\/2026\/12\/30$/);
 });

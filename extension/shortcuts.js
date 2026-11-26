@@ -6,8 +6,13 @@
     navigate: { key: 'Enter', meta: false, ctrl: false, alt: false, shift: false },
     edit: { key: 'e', meta: false, ctrl: false, alt: false, shift: false },
     delete: { key: 'r', meta: true, ctrl: false, alt: false, shift: true },
-    back: { key: 'd', meta: false, ctrl: false, alt: false, shift: false }
+    back: { key: 'd', meta: false, ctrl: false, alt: false, shift: false },
+    previousDay: { key: 'ArrowLeft', meta: false, ctrl: false, alt: false, shift: true },
+    nextDay: { key: 'ArrowRight', meta: false, ctrl: false, alt: false, shift: true }
   };
+  // Shortcuts sharing one feature toggle.
+  const featureOf = action => action === 'previousDay' || action === 'nextDay' ? 'day' : action;
+  const keyLabels = { ' ': 'Space', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓' };
   const modifierKeys = new Set(['Meta', 'Control', 'Alt', 'Shift', 'AltGraph', 'CapsLock', 'Unidentified', 'Dead']);
   function valid(value) {
     return value && typeof value.key === 'string' && value.key.length > 0 &&
@@ -28,11 +33,11 @@
   }
   function label(shortcut) {
     return [shortcut.meta && 'Cmd', shortcut.ctrl && 'Ctrl', shortcut.alt && 'Alt', shortcut.shift && 'Shift',
-      shortcut.key === ' ' ? 'Space' :
-        shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key].filter(Boolean).join(' + ');
+      keyLabels[shortcut.key] ||
+        (shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key)].filter(Boolean).join(' + ');
   }
   function normalizeFeatures(value) {
-    return Object.fromEntries(['links', 'copy', 'recurring', ...Object.keys(defaults)].map(key => [key, value?.[key] !== false]));
+    return Object.fromEntries(['links', 'copy', 'recurring', ...new Set(Object.keys(defaults).map(featureOf))].map(key => [key, value?.[key] !== false]));
   }
-  globalThis.ProtonCalentterShortcuts = { defaults, normalize, normalizeFeatures, fromEvent, matches, label, valid };
+  globalThis.ProtonCalentterShortcuts = { defaults, normalize, normalizeFeatures, featureOf, fromEvent, matches, label, valid };
 })();

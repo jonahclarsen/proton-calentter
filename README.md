@@ -12,6 +12,7 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 - Press **Cmd + Shift + R** to delete and confirm from the preview card, compact editor, or full editor.
 - After deleting from a preview card with the shortcut, press **Cmd + Z** or click **Undo** in the "Event deleted" notification to restore it.
 - When saving an event moves the calendar to its new date, press **D** to return to the exact view you were on.
+- Press **Shift + ←/→** in week view to move it by one day instead of a week.
 - Enable or disable each feature using the checkboxes at the top of settings. All features start enabled.
 - Change shortcuts from the extension's toolbar popup or extension options. Settings follow your system's light/dark mode; event buttons use Proton's own styling.
 
@@ -23,7 +24,7 @@ Better Proton Calendar. A small Chrome extension for `calendar.proton.me`.
 4. Disable the two original Tampermonkey scripts to avoid duplicate controls.
 5. Refresh Proton Calendar. Pin **Proton Calentter** in Chrome's extensions menu for easy access to settings.
 
-No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.4.0**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
+No build step or Tampermonkey installation is needed. After updating the files, click **Reload** on the extension in `chrome://extensions`, then refresh the calendar. The current version is **1.5.0**; verify that Chrome shows this version after reloading. Earlier search-shortcut updates also reported 1.1.0.
 
 ## Shortcuts
 
@@ -40,6 +41,10 @@ Proton has no event trash, so undo recreates the event through Proton's own **Du
 ## Return after move
 
 When saving an event (including confirming a recurring scope) makes Proton navigate to a different date or view within ten seconds, the extension remembers the exact URL you were on, including unusual ones such as a week view that starts mid-week. Press **D** to go back there without reloading. It works once per move, and only until you navigate elsewhere yourself; otherwise **D** is left to Proton. It is ignored while typing or with a dialog open, and follows the **Return shortcut** toggle.
+
+## Day shift
+
+In week view, **Shift + ←** and **Shift + →** move the URL's start date back or forward by one day (for example `/week/2026/11/22/6` becomes `/week/2026/11/23/6`) without reloading, so the week can start on any day. Holding the keys keeps moving. They are ignored while typing, with a dialog open, or outside week view, and follow the **Day shortcuts** toggle.
 
 ## Recurring events
 
@@ -64,7 +69,7 @@ pnpm check
 pnpm test
 ```
 
-The browser tests load the actual unpacked extension into Chromium and serve synthetic calendar markup locally through request interception. They cover linkification, copying, SPA updates, all three deletion views, confirmation scope and cancellation, one-click recurring scope buttons, undo via notification and Cmd + Z with its safeguards, feature toggles, returning after a save moves the view, keyboard safeguards, settings persistence, and both color schemes. Clipboard calls are stubbed inside the extension's isolated world so tests do not change your clipboard. No Proton login or personal event data is needed.
+The browser tests load the actual unpacked extension into Chromium and serve synthetic calendar markup locally through request interception. They cover linkification, copying, SPA updates, all three deletion views, confirmation scope and cancellation, one-click recurring scope buttons, undo via notification and Cmd + Z with its safeguards, feature toggles, returning after a save moves the view, day shifting, keyboard safeguards, settings persistence, and both color schemes. Clipboard calls are stubbed inside the extension's isolated world so tests do not change your clipboard. No Proton login or personal event data is needed.
 
 The macOS Codex sandbox used for this project blocks Chromium from launching; agents should run browser tests with approved execution outside that sandbox. A launch failure reporting `Target page, context or browser has been closed`, `SIGABRT`, and `kill EPERM` occurs before test assertions run. In unfamiliar environments, `pnpm test --max-failures=1` stops quickly for diagnosis. `pnpm check` works inside the sandbox.
 

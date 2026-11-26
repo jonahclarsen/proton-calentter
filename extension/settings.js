@@ -12,7 +12,7 @@
     for (const [action, button] of Object.entries(buttons)) {
       button.textContent = recording === action ? 'Press shortcut' : api.label(shortcuts[action]);
       button.setAttribute('aria-pressed', String(recording === action));
-      button.disabled = !features[action];
+      button.disabled = !features[api.featureOf(action)];
     }
   }
   async function persist(next) {

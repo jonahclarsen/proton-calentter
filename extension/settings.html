@@ -20,6 +20,7 @@
       <label><input type="checkbox" data-feature="navigate" disabled>Navigate shortcut</label>
       <label title="Delete and confirm using Proton's selected scope"><input type="checkbox" data-feature="delete" disabled>Delete shortcut</label>
       <label title="Return to the view a save moved you away from"><input type="checkbox" data-feature="back" disabled>Return shortcut</label>
+      <label title="Move the week view by one day"><input type="checkbox" data-feature="day" disabled>Day shortcuts</label>
     </div>
     <div class="row">
       <label id="save-label">Save description</label>
@@ -40,6 +41,14 @@
     <div class="row">
       <label id="back-label">Return after move</label>
       <button class="shortcut" id="back" aria-labelledby="back-label back" title="Change shortcut" disabled></button>
+    </div>
+    <div class="row">
+      <label id="previousDay-label">Previous day</label>
+      <button class="shortcut" id="previousDay" aria-labelledby="previousDay-label previousDay" title="Change shortcut" disabled></button>
+    </div>
+    <div class="row">
+      <label id="nextDay-label">Next day</label>
+      <button class="shortcut" id="nextDay" aria-labelledby="nextDay-label nextDay" title="Change shortcut" disabled></button>
     </div>
     <footer>
       <span id="status" role="status" aria-live="polite"></span>

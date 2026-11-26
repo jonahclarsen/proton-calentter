@@ -563,6 +563,17 @@
     history.pushState(null, '', url);
     window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
   }
+  // Proton's week URLs (/week/YYYY/M/D[/...]) may start on any day; move that start by one day.
+  function shiftDay(days) {
+    const match = location.pathname.match(/^(.*\/week\/)(\d{4})\/(\d{1,2})\/(\d{1,2})(\/.*)?$/);
+    if (!match) return false;
+    const [, prefix, year, month, day, rest = ''] = match;
+    const date = new Date(Date.UTC(+year, month - 1, +day + days));
+    const pad = /^0/.test(month) || /^0/.test(day) ? n => String(n).padStart(2, '0') : String;
+    history.pushState(null, '', `${prefix}${date.getUTCFullYear()}/${pad(date.getUTCMonth() + 1)}/${pad(date.getUTCDate())}${rest}${location.search}${location.hash}`);
+    window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+    return true;
+  }
   // Wait for saved preferences before allowing shortcuts.
   settingsReady.then(() => document.addEventListener('keydown', event => {
     if (cancelEdit) {
@@ -578,8 +589,18 @@
       }
       cancelDelete();
     }
-    if (event.defaultPrevented || event.repeat || event.isComposing) return;
+    if (event.defaultPrevented || event.isComposing) return;
     const target = event.target;
+    const dayShift = shortcutsAPI.matches(event, shortcuts.previousDay) ? -1 : shortcutsAPI.matches(event, shortcuts.nextDay) ? 1 : 0;
+    // Holding a day shortcut keeps moving.
+    if (features.day && dayShift && !typing(target) && !typing(document.activeElement) &&
+        ![...document.querySelectorAll('.modal-two, .modal-two-dialog-container, [role="dialog"], [aria-modal="true"]')].some(visible) &&
+        shiftDay(dayShift)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (event.repeat) return;
     let button;
     if (undoDeletion && event.key.toLowerCase() === 'z' && event.metaKey !== event.ctrlKey && !event.altKey && !event.shiftKey &&
         !typing(target) && !typing(document.activeElement) &&
